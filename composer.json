@@ -1,0 +1,34 @@
+{
+  "name": "robtrehy/laravel-user-preferences",
+  "description": "A package for Laravel to store user preferences for your project.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Rob Trehy",
+      "email": "robert@trehy.co.uk"
+    }
+  ],
+  "minimum-stability": "stable",
+  "require": {
+    "php": ">=7.0",
+    "illuminate/support": ">=5.5",
+    "illuminate/config": "5.*",
+    "illuminate/database": "5.*"
+  },
+  "autoload": {
+    "psr-4": {
+      "RobTrehy\\LaravelUserPreferences\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "RobTrehy\\LaravelUserPreferences\\UserPreferencesServiceProvider"
+      ],
+      "aliases": {
+        "SimplePackage": "RobTrehy\\LaravelUserPreferences\\UserPreferencesFacade"
+      }
+    }
+  }
+}
