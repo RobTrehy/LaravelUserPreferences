@@ -48,7 +48,7 @@ In the `defaults` array you can set your default values for user preferences.
 ## Usage
 Include LaravelUserPreferences into your controllers with
 ``` PHP
-use RobTrehy\LaravelUserPreferencesUserPreferences
+use RobTrehy\LaravelUserPreferences\UserPreferences
 ```
 You can then use `UserPreferences` class to access the methods in this package.
 
