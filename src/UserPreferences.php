@@ -57,7 +57,7 @@ class UserPreferences {
             ->where(config('user-preferences.database.primary_key'), '=', Auth::id())
             ->get();
 
-        $preferences = json_decode($data[0]->settings);
+        $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
 
         if (json_last_error() !== JSON_ERROR_NONE) {
             self::$preferences = (object) config('user-preferences.defaults');
