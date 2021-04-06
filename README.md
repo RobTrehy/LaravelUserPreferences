@@ -1,4 +1,9 @@
 # Laravel User Preferences
+![](https://img.shields.io/github/workflow/status/RobTrehy/LaravelUserPreferences/Unit%20Tests?style=flat-square)
+![](https://img.shields.io/github/license/RobTrehy/LaravelUserPreferences?style=flat-square)
+![](https://img.shields.io/github/languages/code-size/RobTrehy/LaravelUserPreferences?style=flat-square)
+![](https://img.shields.io/packagist/v/robtrehy/laravel-user-preferences?style=flat-square)
+![](https://img.shields.io/packagist/dt/robtrehy/laravel-user-preferences?style=flat-square)
 
 This is a package for Laravel that can be used to store and access preferences of the currently authenticated user.
 The preferences are stored as JSON in a single database column. The default configuration stores this alongside the user record in 
