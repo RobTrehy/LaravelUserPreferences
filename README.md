@@ -96,6 +96,15 @@ This will return `true` if a value was found, `false` if not.
 ### Save a preference
 All preferences are saved automatically when `UserPreferences::set();` is called.
 
+## Changelog
+Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
+
+## Contributing
+Please see [CONTRIBUTING](.github/CONTRIBUTING.md)) for details.
+
+## Security Vulnerabilities
+Please review our [security policy](.github/SECURITY.md) on how to report security vulnerabilities.
+
 ## License
 This Laravel package is free software distributed under the terms of the MIT license.
 See [LICENSE](LICENSE)
