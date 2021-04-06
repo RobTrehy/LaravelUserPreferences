@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ruleset name="PHP_CodeSniffer">
+    <description>The coding standard for RobTrehy/Laravel-User-Preferences.</description>
+    <rule ref="PSR2">
+        <exclude name="Generic.Files.LineEndings"/>
+    </rule>
+
+    <file>src</file>
+
+    <!-- Show progression -->
+    <arg value="p"/>
+</ruleset>

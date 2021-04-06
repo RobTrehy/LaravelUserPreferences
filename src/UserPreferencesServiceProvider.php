@@ -13,13 +13,20 @@ class UserPreferencesServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        $this->publishes([
-            __DIR__ . '/config/user-preferences.php' => config_path('user-preferences.php'),
-        ], 'config');
+        if ($this->app->runningInConsole()) {
+            // Export the config
+            $this->publishes([
+                __DIR__ . '/config/user-preferences.php' => config_path('user-preferences.php'),
+            ], 'config');
 
-        $this->publishes([
-            __DIR__ . '/database/migrations' => base_path('/database/migrations'),
-        ], 'migrations');
+            // Export the migration
+            if (! class_exists('AddPreferencesToTable')) {
+                $this->publishes([
+                    __DIR__ . '/database/migrations/add_preferences_to_table.php.stub'
+                    => database_path('migrations/' . date('Y_m_d_His', time()) . '_add_preferences_to_table.php'),
+                ], 'migrations');
+            }
+        }
     }
 
     /**
@@ -29,14 +36,12 @@ class UserPreferencesServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        $this->app->singleton(UserPreferences::class, function() {
+        $this->app->singleton(UserPreferences::class, function () {
             return new UserPreferences();
         });
 
         $this->app->alias(UserPreferences::class, 'user-preferences');
 
-        if ($this->app->config->get('user-preferences') === null) {
-            $this->app->config->set('user-preferences', require __DIR__ . '/config/user-preferences.php');
-        }
+        $this->mergeConfigFrom(__DIR__.'/config/user-preferences.php', 'user-preferences');
     }
 }

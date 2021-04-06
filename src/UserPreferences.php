@@ -3,8 +3,8 @@
 namespace RobTrehy\LaravelUserPreferences;
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Console\Exception\InvalidArgumentException;
-use DB;
 
 /**
  * Class UserPreferences
@@ -13,7 +13,8 @@ use DB;
  *
  * @package RobTrehy\LaravelUserPreferences
  */
-class UserPreferences {
+class UserPreferences
+{
     /**
      * The cache of the user's preferences
      *
@@ -26,20 +27,25 @@ class UserPreferences {
     /**
      * UserPreferences Constructor
      */
-    public function __construct() {}
+    public function __construct()
+    {
+    }
 
     /**
      * UserPreferences destructor
      */
-    public function __destruct() {}
+    public function __destruct()
+    {
+    }
 
     /**
      * Check for preferences, load if not
      */
     protected static function preferencesLoaded()
     {
-        if (self::$hasLoaded)
+        if (self::$hasLoaded) {
             return;
+        }
         self::getPreferences();
     }
 
@@ -68,7 +74,7 @@ class UserPreferences {
     }
 
     /**
-     * This method sets the default preferences for a user when the account is created
+     * This method sets the default preferences for a user
      */
     public static function setDefaultPreferences()
     {
@@ -89,14 +95,13 @@ class UserPreferences {
     {
         self::preferencesLoaded();
 
-        if (isset(self::$preferences->{$key}))
+        if (isset(self::$preferences->{$key})) {
             return self::$preferences->{$key};
-
-        else if (config('user-preferences.defaults.' . $key))
+        } elseif (config('user-preferences.defaults.' . $key)) {
             return config('user-preferences.defaults.' . $key);
-
-        else
+        } else {
             return null;
+        }
     }
 
     /**
@@ -111,8 +116,13 @@ class UserPreferences {
     {
         self::preferencesLoaded();
 
-        if (config('user-preferences.defaults.' . $key) && gettype($value) !== gettype(config('user-preferences.defaults.' . $key)))
-            throw new InvalidArgumentException(('The expected type is "' . gettype(config('user-preferences.defaults.' . $key)) . '"! "' . gettype($value) . '" was given.'));
+        if (config('user-preferences.defaults.' . $key)
+            && gettype($value) !== gettype(config('user-preferences.defaults.' . $key))) {
+            throw new InvalidArgumentException(
+                ('The expected type is "' . gettype(config('user-preferences.defaults.' . $key)) .
+                '"! "' . gettype($value) . '" was given.')
+            );
+        }
 
         self::$preferences->{$key} = $value;
         self::save();
@@ -131,8 +141,7 @@ class UserPreferences {
     {
         self::preferencesLoaded();
 
-        if (config('user-preferences.defaults.' . $key))
-        {
+        if (config('user-preferences.defaults.' . $key)) {
             self::$preferences->{$key} = config('user-preferences.defaults.' . $key);
             self::save();
             return true;
@@ -175,5 +184,4 @@ class UserPreferences {
             ->where(config('user-preferences.database.primary_key'), '=', Auth::id())
             ->update([config('user-preferences.database.column') => json_encode(self::$preferences)]);
     }
-
 }

@@ -1,0 +1,41 @@
+name: Unit Tests
+
+on: [push, pull_request]
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        name: PHP ${{ matrix.php }}
+        strategy:
+            fail-fast: true
+            matrix:
+                php: [7.3, 7.4, 8.0]
+                include:
+                    -   laravel: 8.*
+                        testbench: 6.*
+        steps:
+            -   name: Checkout Code
+                uses: actions/checkout@v1
+            -   name: Setup PHP
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: ${{ matrix.php }}
+            -   name: Cache dependencies
+                uses: actions/cache@v1
+                with:
+                    path: ~/.composer/cache/files
+                    key: dependencies-${{ matrix.dependency-version }}-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}
+            -   name: Install dependencies
+                run: |
+                    composer require "laravel/framework:${{ matrix.laravel }}" "doctrine/dbal" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+                    composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
+            -   name: Composer Autoload
+                run: composer dump-autoload --optimize
+            -   name: Execute tests
+                run: vendor/bin/testbench package:test
+            -   name: Catch Testbench Laravel.log on Fail
+                if: failure()
+                uses: actions/upload-artifact@v2
+                with:
+                    name: testbench laravel log
+                    path: ./vendor/orchestra/testbench-core/laravel/storage/logs/laravel.log

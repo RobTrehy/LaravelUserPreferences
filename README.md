@@ -1,25 +1,21 @@
 # Laravel User Preferences
 
-This is a package for Laravel 5, that can be used to store and access preferences of the currently authenticated user.
-The preferences are stored as JSON in a single database column. The default stores this alongside the user record in 
+This is a package for Laravel that can be used to store and access preferences of the currently authenticated user.
+The preferences are stored as JSON in a single database column. The default configuration stores this alongside the user record in 
 the `users` table.
 
 ## Installation
 1. Run `composer require robtrehy/laravel-user-preferences` to include this in your project.
-2. Add the UserPreferences alias to your `config\app.php` file:
-    ```PHP
-    'UserPreferences' => \RobTrehy\LaravelUserPreferences\UserPreferences::class,
-    ```
-3. Publish the config file with the following command
+2. Publish the config file with the following command
     ```
     php artisan vendor:publish --provider="RobTrehy\LaravelUserPreferences\UserPreferencesServiceProvider" --tag="config"
     ```
 4. Modify the published configuration file to your requirements. The file is located at `config/user-preferences.php`.
-5. Add the `preferences` column to the database. If you wish to add this to the `users` table, a migration file is 
-included, just run the following command
+5. Add the `preferences` column to the database. A migration file is included, just run the following command
     ```
     php artisan vendor:publish --provider="RobTrehy\LaravelUserPreferences\UserPreferencesServiceProvider" --tag="migrations" && php artisan migrate
     ```
+    This will add the column defined in your configuration file to the table defined in your configuration file.
     
 ## Configuration
 Open `config/user-preferences.php` to adjust the packages configuration. 
@@ -46,14 +42,9 @@ In the `defaults` array you can set your default values for user preferences.
 ```
 
 ## Usage
-Include LaravelUserPreferences into your controllers with
-``` PHP
-use RobTrehy\LaravelUserPreferences\UserPreferences
-```
-You can then use `UserPreferences` class to access the methods in this package.
 
 ### Set a preference
-Use this method to set a preference for the currently authenticated user
+Use this method to set a preference for the **currently authenticated user**
 ```PHP
 UserPreferences::set(string [setting], [value]);
 ```
@@ -63,15 +54,15 @@ If no default value exists, any value type can be saved. If the default value ty
 `UserPreferences::save()` will return an `InvalidArgumentException`.
 
 ### Reset all default preferences
-Use this method to reset a user to the default preferences found in the config file.
+Use this method to reset the **currently authenticated user** to the default preferences found in the config file.
 ```PHP
 UserPreferences::setDefaultPreferences();
 ```
 > Note: This will not adjust user preferences that do not contain a default value in the config file.
 
 ### Reset a specific default preference
-Use this method to reset a single preference to the default value found in your config file, if it exists.
-If no default value is set in the config file, the preference will be removed from the user record.
+Use this method to reset a single preference, for the **currently authenticated user**, to the default value found in your config file, if it exists.
+If no default value is set in the config file, the preference will be removed from the **currently authenticated user**'s record.
 ```PHP
 UserPreferences::reset(string [setting]);
 ```
@@ -79,19 +70,19 @@ This method will return `true` if a default value was set from the config file.
 If no default value was found, this method will return `false`
 
 ### Get a preference
-Use this method to get the value of a user preference.
+Use this method to get the value of a preference for the **currently authenticated user**.
 ```PHP
 UserPreferences::get(string [setting]);
 ```
 
 ### Get all preferences
-Use this method to get all of the user preferences
+Use this method to get all of the **currently authenticated user**'s preferences
 ```PHP
 UserPreferences::all()
 ```
 
 ### Check if a user has a specific preference
-To check if a user has a specific preference set, you can call
+To check if the **currently authenticated user** has a specific preference set, you can call
 ```PHP
 UserPreferences::has(string [setting]);
 ```

@@ -1,34 +1,51 @@
 {
-  "name": "robtrehy/laravel-user-preferences",
-  "description": "A package for Laravel to store user preferences for your project.",
-  "type": "library",
-  "license": "MIT",
-  "authors": [
-    {
-      "name": "Rob Trehy",
-      "email": "robert@trehy.co.uk"
-    }
-  ],
-  "minimum-stability": "stable",
-  "require": {
-    "php": ">=7.0",
-    "illuminate/support": ">=5.5",
-    "illuminate/config": "5.*",
-    "illuminate/database": "5.*"
-  },
-  "autoload": {
-    "psr-4": {
-      "RobTrehy\\LaravelUserPreferences\\": "src/"
-    }
-  },
-  "extra": {
-    "laravel": {
-      "providers": [
-        "RobTrehy\\LaravelUserPreferences\\UserPreferencesServiceProvider"
-      ],
-      "aliases": {
-        "SimplePackage": "RobTrehy\\LaravelUserPreferences\\UserPreferencesFacade"
-      }
-    }
-  }
+    "name": "robtrehy/laravel-user-preferences",
+    "description": "A package for Laravel to store user preferences for your project.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Rob Trehy",
+            "email": "robert@trehy.co.uk"
+        }
+    ],
+    "require": {
+        "php": "^7.3|^8.0",
+        "laravel/framework": "^8.0",
+        "doctrine/dbal": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.3",
+        "squizlabs/php_codesniffer": "^3.5",
+        "orchestra/testbench": "^6.16",
+        "nunomaduro/collision": "^5.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "RobTrehy\\LaravelUserPreferences\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RobTrehy\\LaravelUserPreferences\\Tests\\": "tests/",
+            "RobTrehy\\LaravelUserPreferences\\Factories\\": "tests/database/factories/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "RobTrehy\\LaravelUserPreferences\\UserPreferencesServiceProvider"
+            ],
+            "aliases": {
+                "UserPreferences": "RobTrehy\\LaravelUserPreferences\\UserPreferencesFacade"
+            }
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "@php ./vendor/bin/testbench package:discover --ansi"
+        ]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }
