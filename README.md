@@ -100,7 +100,7 @@ All preferences are saved automatically when `UserPreferences::set();` is called
 Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
 
 ## Contributing
-Please see [CONTRIBUTING](.github/CONTRIBUTING.md)) for details.
+Please see [CONTRIBUTING](.github/CONTRIBUTING.md) for details.
 
 ## Security Vulnerabilities
 Please review our [security policy](.github/SECURITY.md) on how to report security vulnerabilities.
