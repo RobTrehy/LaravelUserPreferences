@@ -27,7 +27,7 @@ jobs:
                     key: dependencies-${{ matrix.dependency-version }}-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}
             -   name: Install dependencies
                 run: |
-                    composer require "laravel/framework:${{ matrix.laravel }}" "doctrine/dbal" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+                    composer require "laravel/framework:${{ matrix.laravel }}" "doctrine/dbal" "orchestra/testbench:${{ matrix.testbench }}" --with-all-dependencies --no-interaction --no-update
                     composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
             -   name: Composer Autoload
                 run: composer dump-autoload --optimize
