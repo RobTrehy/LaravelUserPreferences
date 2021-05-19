@@ -94,14 +94,11 @@ class UserPreferences
     public static function get(string $key)
     {
         self::preferencesLoaded();
-
-        if (isset(self::$preferences->{$key})) {
+        
+        if (isset(self::$preferences->{$key}))
             return self::$preferences->{$key};
-        } elseif (config('user-preferences.defaults.' . $key)) {
-            return config('user-preferences.defaults.' . $key);
-        } else {
-            return null;
-        }
+        
+        return config('user-preferences.defaults.' . $key, NULL);
     }
 
     /**
