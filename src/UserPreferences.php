@@ -4,6 +4,7 @@ namespace RobTrehy\LaravelUserPreferences;
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Console\Exception\InvalidArgumentException;
 
 /**
@@ -50,18 +51,22 @@ class UserPreferences
     }
 
     /**
-     * Get all preferences of the currently authenticated user from the database
+     * Get all preferences of the currently authenticated user.
+     * If it's already been loaded, it will exist in cache.
+     * If not, it will be loaded into the cache
      *
      * If the preferences column is empty, the default preferences will be loaded from config
      */
     protected static function getPreferences()
     {
-        self::$hasLoaded = true;
+        $data = Cache::rememberForever('user-'.Auth::id().'-preferences', function () {
+            return DB::table(config('user-preferences.database.table'))
+                     ->select(config('user-preferences.database.column'))
+                     ->where(config('user-preferences.database.primary_key'), '=', Auth::id())
+                     ->get();
+        });
 
-        $data = DB::table(config('user-preferences.database.table'))
-            ->select(config('user-preferences.database.column'))
-            ->where(config('user-preferences.database.primary_key'), '=', Auth::id())
-            ->get();
+        self::$hasLoaded = true;
 
         $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
 
@@ -100,7 +105,9 @@ class UserPreferences
     }
 
     /**
-     * Set the preference by key
+     * Set the preference by key.
+     * Flush the cache for this key/user so
+     * it's loaded next time.
      *
      * This function will check the data type with the defaults and save to the database
      *
@@ -176,7 +183,14 @@ class UserPreferences
     protected static function save()
     {
         DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), '=', Auth::id())
+            ->where(config('user-preferences.database.primary_key'), Auth::id())
             ->update([config('user-preferences.database.column') => json_encode(self::$preferences)]);
+
+        self::resetCache();
+    }
+
+    protected static function resetCache()
+    {
+        Cache::forget('user-'.Auth::id().'-preferences');
     }
 }
