@@ -2,6 +2,9 @@
 
 All notable changes to `robtrehy/laravel-user-permissions` will be documented in this file.
 
+## 2.0.1 - 2021-06-30
+- Security Updates
+
 ## 2.0.0 - 2021-04-06
 
 - Added support for Laravel 8
