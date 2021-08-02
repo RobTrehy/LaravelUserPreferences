@@ -59,12 +59,15 @@ class UserPreferences
      */
     protected static function getPreferences()
     {
-        $data = Cache::rememberForever('user-'.Auth::id().'-preferences', function () {
-            return DB::table(config('user-preferences.database.table'))
-                     ->select(config('user-preferences.database.column'))
-                     ->where(config('user-preferences.database.primary_key'), '=', Auth::id())
-                     ->get();
-        });
+        $data = Cache::rememberForever(
+            config('user-preferences.cache.prefix') . Auth::id() . config('user-preferences.cache.suffix'),
+            function () {
+                return DB::table(config('user-preferences.database.table'))
+                ->select(config('user-preferences.database.column'))
+                ->where(config('user-preferences.database.primary_key'), Auth::id())
+                ->get();
+            }
+        );
 
         self::$hasLoaded = true;
 
@@ -98,10 +101,11 @@ class UserPreferences
      */
     public static function get(string $key)
     {
-        if (self::has($key))
+        if (self::has($key)) {
             return self::$preferences->{$key};
+        }
 
-        return config('user-preferences.defaults.' . $key, NULL);
+        return config('user-preferences.defaults.' . $key, null);
     }
 
     /**
@@ -119,10 +123,11 @@ class UserPreferences
         self::preferencesLoaded();
 
         if (config('user-preferences.defaults.' . $key)
-            && gettype($value) !== gettype(config('user-preferences.defaults.' . $key))) {
+            && gettype($value) !== gettype(config('user-preferences.defaults.' . $key))
+        ) {
             throw new InvalidArgumentException(
                 ('The expected type is "' . gettype(config('user-preferences.defaults.' . $key)) .
-                '"! "' . gettype($value) . '" was given.')
+                    '"! "' . gettype($value) . '" was given.')
             );
         }
 
@@ -191,6 +196,6 @@ class UserPreferences
 
     protected static function resetCache()
     {
-        Cache::forget('user-'.Auth::id().'-preferences');
+        Cache::forget(config('user-preferences.cache.prefix') . Auth::id() . config('user-preferences.cache.suffix'));
     }
 }
