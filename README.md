@@ -31,6 +31,9 @@ to create the default configuration file.
 
 Set `table`, `column`, and `primary_key` to match your requirements. `primary_key` should be the users id.
 
+Laravel User Preferences uses the Laravel Cache driver to reduce the number of queries on your database. By default Laravel Caches using the `file` driver. If you wish to disable this, you can use the `null` driver.
+The cache key supplied by Laravel User Preferences adds a prefix and suffix to the user's `id`. You can supply your own prefix and suffix by changing the `cache.prefix` and `cache.suffix` configuration values.
+
 In the `defaults` array you can set your default values for user preferences.
 
 #### Example configuration
@@ -39,6 +42,10 @@ In the `defaults` array you can set your default values for user preferences.
         'table' => 'users',
         'column' => 'preferences',
         'primary_key' => 'id'
+    ],
+    'cache' => [
+        'prefix' => 'user-',
+        'suffix' => '-preferences',
     ],
     'defaults' => [
         'theme' => 'blue',
