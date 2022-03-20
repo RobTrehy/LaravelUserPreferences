@@ -71,6 +71,11 @@ class UserPreferences
 
         self::$hasLoaded = true;
 
+        if(is_null($data[0])) {
+            self::$preferences = (object) config('user-preferences.defaults');
+            return;
+        }
+        
         $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
 
         if (json_last_error() !== JSON_ERROR_NONE) {
