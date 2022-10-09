@@ -2,6 +2,10 @@
 
 All notable changes to `robtrehy/laravel-user-permissions` will be documented in this file.
 
+## 3.0.0 - 2022-10-09
+- Added support for Laravel 9
+- PHP >= 8.0.2 required
+
 ## 2.1.1 - 2022-03-30
 - Security Updates
 - Fix: avoid passing null to json_decode in PHP 8.1 [Reex11](https://github.com/Reex11)
