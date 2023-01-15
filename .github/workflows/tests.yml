@@ -9,10 +9,10 @@ jobs:
         strategy:
             fail-fast: true
             matrix:
-                php: [7.3, 7.4, 8.0]
+                php: [8.0, 8.1]
                 include:
-                    -   laravel: 8.*
-                        testbench: 6.*
+                    -   laravel: 9.*
+                        testbench: 7.*
         steps:
             -   name: Checkout Code
                 uses: actions/checkout@v1
