@@ -1,5 +1,5 @@
 {
-    "name": "robtrehy/laravel-user-preferences",
+    "name": "procyonweb/laravel-user-preferences",
     "description": "A package for Laravel to store user preferences for your project.",
     "type": "library",
     "license": "MIT",
@@ -11,7 +11,7 @@
     ],
     "require": {
         "php": "^8.0",
-        "laravel/framework": "9.*",
+        "laravel/framework": "10.*",
         "doctrine/dbal": "^3.6"
     },
     "require-dev": {
