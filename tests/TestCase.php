@@ -30,7 +30,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
     protected function overrideApplicationProviders($app)
     {
         return [
-        'UserPreferences' => 'RobTrehy\LaravelUserPreferences\UserPreferencesFacade',
+            'UserPreferences' => 'RobTrehy\LaravelUserPreferences\UserPreferencesFacade',
         ];
     }
 
