@@ -2,6 +2,10 @@
 
 All notable changes to `robtrehy/laravel-user-permissions` will be documented in this file.
 
+## 3.1.0 - 2024-03-18
+- Added support for Laravel 11
+- Added support for Laravel 10
+
 ## 3.0.0 - 2023-01-15
 - Added support for Laravel 9
 
