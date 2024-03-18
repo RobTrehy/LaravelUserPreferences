@@ -71,7 +71,7 @@ class UserPreferences
 
         self::$hasLoaded = true;
 
-        if (is_null($data[0])) {
+        if ($data->isEmpty()) {
             self::$preferences = (object) config('user-preferences.defaults');
             return;
         }
