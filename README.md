@@ -1,5 +1,5 @@
 # Laravel User Preferences
-![](https://img.shields.io/github/workflow/status/RobTrehy/LaravelUserPreferences/Unit%20Tests?style=flat-square)
+![](https://img.shields.io/github/actions/workflow/status/RobTrehy/LaravelUserPreferences/tests.yml?branch=master&style=flat-square)
 ![](https://img.shields.io/github/license/RobTrehy/LaravelUserPreferences?style=flat-square)
 ![](https://img.shields.io/github/languages/code-size/RobTrehy/LaravelUserPreferences?style=flat-square)
 ![](https://img.shields.io/packagist/v/robtrehy/laravel-user-preferences?style=flat-square)
