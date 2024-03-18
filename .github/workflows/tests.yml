@@ -53,11 +53,4 @@ jobs:
                 run: composer dump-autoload --optimize
 
             -   name: Execute tests
-                run: vendor/bin/testbench package:test
-
-            -   name: Catch Testbench Laravel.log on Fail
-                if: failure()
-                uses: actions/upload-artifact@v2
-                with:
-                    name: testbench laravel log
-                    path: ./vendor/orchestra/testbench-core/laravel/storage/logs/laravel.log
+                run: vendor/bin/phpunit
