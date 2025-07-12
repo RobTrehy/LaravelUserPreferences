@@ -1,5 +1,5 @@
 {
-    "name": "sunscreem/laravel-user-preferences",
+    "name": "robtrehy/laravel-user-preferences",
     "description": "A package for Laravel to store user preferences for your project.",
     "type": "library",
     "license": "MIT",
