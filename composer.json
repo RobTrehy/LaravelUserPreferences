@@ -1,5 +1,5 @@
 {
-    "name": "sunscreem/laravel-user-preferences",
+    "name": "robtrehy/laravel-user-preferences",
     "description": "A package for Laravel to store user preferences for your project.",
     "type": "library",
     "license": "MIT",
@@ -10,14 +10,14 @@
         }
     ],
     "require": {
-        "php": "^8.0",
-        "laravel/framework": "^9.0|^10.0|^11.0|^12.0"
+        "php": "^8.1",
+        "laravel/framework": "^10.0|^11.0|^12.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^9.5|^10.5|^11.0",
-        "squizlabs/php_codesniffer": "^3.6",
-        "nunomaduro/collision": "^6.4|^7.0|^8.0",
-        "orchestra/testbench": "^7.0|^8.0|^9.0"
+        "phpunit/phpunit": "^10.5|^11.0|^12.0",
+        "squizlabs/php_codesniffer": "^3.6|^3.7",
+        "nunomaduro/collision": "^7.0|^8.0",
+        "orchestra/testbench": "^8.20|^9.0|^10.2"
     },
     "autoload": {
         "psr-4": {
