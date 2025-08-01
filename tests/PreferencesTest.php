@@ -11,7 +11,6 @@ class PreferencesTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @test */
     public function testCanSetAndGetAPreference()
     {
         // Create and authenticate a user
@@ -24,7 +23,6 @@ class PreferencesTest extends TestCase
         $this->assertEquals('test_value', $value);
     }
 
-    /** @test */
     public function testCanCheckIfPreferenceIsNotSet()
     {
         $value = UserPreferences::has('key_not_set');
@@ -33,7 +31,6 @@ class PreferencesTest extends TestCase
         $this->assertFalse($value);
     }
 
-    /** @test */
     public function testCanCheckIfPreferenceIsSet()
     {
         UserPreferences::set('key_set', 'some_value');
