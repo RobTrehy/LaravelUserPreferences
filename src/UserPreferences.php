@@ -78,7 +78,7 @@ class UserPreferences
         if ($data->isEmpty()) {
             self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
         } else {
-            $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
+            $preferences = json_decode($data[0]->{config('user-preferences.database.column')} ?? '{}');
             if (json_last_error() !== JSON_ERROR_NONE) {
                 self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
             } else {
