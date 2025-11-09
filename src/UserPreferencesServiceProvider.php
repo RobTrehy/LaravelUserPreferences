@@ -36,9 +36,7 @@ class UserPreferencesServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        $this->app->singleton(UserPreferences::class, function () {
-            return new UserPreferences();
-        });
+        $this->app->singleton('user-preferences', fn() => new UserPreferences());
 
         $this->app->alias(UserPreferences::class, 'user-preferences');
 
