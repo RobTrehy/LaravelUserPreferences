@@ -2,8 +2,11 @@
 
 All notable changes to `robtrehy/laravel-user-preferences` will be documented in this file.
 
+## 4.1.3 - 2025-11-10
+- Hotfix: Ensure when the database column is null, `UserPreferences::all()` applies the defaults and does not trigger a json_decode(null) warning
+
 ## 4.1.2 - 2025-11-10
-- Hot Fix: Ensure ::all() method returns an array for backwards compatibility
+- Hotfix: Ensure `UserPreferences::all()` method returns an array for backwards compatibility
 
 ## 4.1.1 - 2025-11-09
 - Fix: Avoid deprecation warning in PHP 8.1+ when preferences column is null (#20)

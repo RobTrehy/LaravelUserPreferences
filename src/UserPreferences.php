@@ -75,11 +75,13 @@ class UserPreferences
             }
         );
 
-        if ($data->isEmpty()) {
+        if ($data->isEmpty() || is_null($data[0]->{config('user-preferences.database.column')})) {
+            // No row or column is null → use defaults
             self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
         } else {
-            $preferences = json_decode($data[0]->{config('user-preferences.database.column')} ?? '{}');
-            if (json_last_error() !== JSON_ERROR_NONE) {
+            $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
+            if (json_last_error() !== JSON_ERROR_NONE || is_null($preferences)) {
+                // Invalid JSON → fallback to defaults
                 self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
             } else {
                 self::$preferencesCache[$userId] = $preferences;

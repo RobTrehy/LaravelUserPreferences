@@ -168,6 +168,69 @@ class PreferencesTest extends TestCase
         $this->assertEquals('value2', $allPreferences['key2']);
     }
 
+    public function testAllReturnsDefaultPreferencesWhenNoDataExists()
+    {
+        $user = User::factory()->create();
+        Auth::login($user);
+
+        // Set up some defaults in the config for this test
+        config()->set('user-preferences.defaults.test_key1', 'value1');
+        config()->set('user-preferences.defaults.test_key2', 'value2');
+
+        // Reset internal caches
+        $reflection = new \ReflectionClass(UserPreferences::class);
+
+        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
+        $preferencesCacheProp->setAccessible(true);
+        $preferencesCacheProp->setValue([]);
+
+        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
+        $hasLoadedCacheProp->setAccessible(true);
+        $hasLoadedCacheProp->setValue([]);
+
+        // Ensure cache and database are empty
+        Cache::flush();
+        DB::table(config('user-preferences.database.table'))
+            ->where(config('user-preferences.database.primary_key'), $user->id)
+            ->delete();
+
+        $allPreferences = UserPreferences::all();
+
+        $this->assertIsArray($allPreferences);
+        $this->assertEquals('value1', $allPreferences['test_key1']);
+        $this->assertEquals('value2', $allPreferences['test_key2']);
+    }
+
+    public function testAllAppliesDefaultsWhenDatabaseColumnIsNull()
+    {
+        $user = User::factory()->create();
+        Auth::login($user);
+
+        // Clear caches
+        $reflection = new \ReflectionClass(UserPreferences::class);
+        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
+        $preferencesCacheProp->setAccessible(true);
+        $preferencesCacheProp->setValue([]);
+
+        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
+        $hasLoadedCacheProp->setAccessible(true);
+        $hasLoadedCacheProp->setValue([]);
+
+        Cache::flush();
+
+        // Make the preferences column null
+        DB::table(config('user-preferences.database.table'))
+            ->where(config('user-preferences.database.primary_key'), $user->id)
+            ->update([config('user-preferences.database.column') => null]);
+
+        $defaults = config('user-preferences.defaults');
+
+        $allPreferences = UserPreferences::all();
+
+        $this->assertIsArray($allPreferences);
+        $this->assertEquals($defaults, $allPreferences);
+    }
+
     // --------------------------------------------------------
     // Tests for the new "ForUser" methods
     // --------------------------------------------------------
