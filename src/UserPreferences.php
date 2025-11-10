@@ -196,7 +196,7 @@ class UserPreferences
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
-        return self::$preferencesCache[$userId];
+        return json_decode(json_encode(self::$preferencesCache[$userId]), true);
     }
 
     /**

@@ -163,9 +163,9 @@ class PreferencesTest extends TestCase
 
         $allPreferences = UserPreferences::all();
 
-        $this->assertIsObject($allPreferences);
-        $this->assertEquals('value1', $allPreferences->key1);
-        $this->assertEquals('value2', $allPreferences->key2);
+        $this->assertIsArray($allPreferences);
+        $this->assertEquals('value1', $allPreferences['key1']);
+        $this->assertEquals('value2', $allPreferences['key2']);
     }
 
     // --------------------------------------------------------
