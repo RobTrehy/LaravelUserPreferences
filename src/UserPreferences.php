@@ -65,21 +65,23 @@ class UserPreferences
     {
         $userId = $userId ?? Auth::id();
 
-        $data = Cache::rememberForever(
+        // Cache the JSON column value only — Laravel 13 disallows unserializing
+        // arbitrary classes (e.g. Collections) from the cache by default.
+        $column = config('user-preferences.database.column');
+        $rawPreferences = Cache::rememberForever(
             config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix'),
-            function () use ($userId) {
+            function () use ($userId, $column) {
                 return DB::table(config('user-preferences.database.table'))
-                    ->select(config('user-preferences.database.column'))
                     ->where(config('user-preferences.database.primary_key'), $userId)
-                    ->get();
+                    ->value($column);
             }
         );
 
-        if ($data->isEmpty() || is_null($data[0]->{config('user-preferences.database.column')})) {
+        if (is_null($rawPreferences)) {
             // No row or column is null → use defaults
             self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
         } else {
-            $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
+            $preferences = json_decode($rawPreferences);
             if (json_last_error() !== JSON_ERROR_NONE || is_null($preferences)) {
                 // Invalid JSON → fallback to defaults
                 self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');

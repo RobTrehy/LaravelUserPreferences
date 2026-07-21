@@ -2,6 +2,9 @@
 
 All notable changes to `robtrehy/laravel-user-preferences` will be documented in this file.
 
+## 4.2.1 - 2026-07-21
+- Cache preference column values as scalars instead of Collections (Laravel 13 `serializable_classes` compatibility)
+
 ## 4.2.0 - 2026-07-21
 - Added support for Laravel 13
 
