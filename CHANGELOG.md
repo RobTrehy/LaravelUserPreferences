@@ -2,6 +2,9 @@
 
 All notable changes to `robtrehy/laravel-user-preferences` will be documented in this file.
 
+## 4.2.0 - 2026-07-21
+- Added support for Laravel 13
+
 ## 4.1.3 - 2025-11-10
 - Hotfix: Ensure when the database column is null, `UserPreferences::all()` applies the defaults and does not trigger a json_decode(null) warning
 
