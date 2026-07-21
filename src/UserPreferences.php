@@ -40,9 +40,9 @@ class UserPreferences
     /**
      * Check for preferences, load if not already loaded for this user.
      *
-     * @param int|null $userId
+     * @param int|string|null $userId
      */
-    protected static function preferencesLoaded(?int $userId = null)
+    protected static function preferencesLoaded(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
         if (self::$hasLoadedCache[$userId] ?? false) {
@@ -59,27 +59,29 @@ class UserPreferences
      *
      * If the preferences column is empty, the default preferences will be loaded from config.
      *
-     * @param int|null $userId
+     * @param int|string|null $userId
      */
-    protected static function getPreferences(?int $userId = null)
+    protected static function getPreferences(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
 
-        $data = Cache::rememberForever(
+        // Cache the JSON column value only — Laravel 13 disallows unserializing
+        // arbitrary classes (e.g. Collections) from the cache by default.
+        $column = config('user-preferences.database.column');
+        $rawPreferences = Cache::rememberForever(
             config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix'),
-            function () use ($userId) {
+            function () use ($userId, $column) {
                 return DB::table(config('user-preferences.database.table'))
-                    ->select(config('user-preferences.database.column'))
                     ->where(config('user-preferences.database.primary_key'), $userId)
-                    ->get();
+                    ->value($column);
             }
         );
 
-        if ($data->isEmpty() || is_null($data[0]->{config('user-preferences.database.column')})) {
+        if (is_null($rawPreferences)) {
             // No row or column is null → use defaults
             self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
         } else {
-            $preferences = json_decode($data[0]->{config('user-preferences.database.column')});
+            $preferences = json_decode($rawPreferences);
             if (json_last_error() !== JSON_ERROR_NONE || is_null($preferences)) {
                 // Invalid JSON → fallback to defaults
                 self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
@@ -94,9 +96,9 @@ class UserPreferences
     /**
      * Set the default preferences for a user
      *
-     * @param int|null $userId
+     * @param int|string|null $userId
      */
-    public static function setDefaultPreferences(?int $userId = null)
+    public static function setDefaultPreferences(mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         self::save($userId);
@@ -108,10 +110,10 @@ class UserPreferences
      * Returns the preference if set, otherwise returns the default value from config.
      *
      * @param string $key
-     * @param int|null $userId
+     * @param int|string|null $userId
      * @return mixed
      */
-    public static function get(string $key, ?int $userId = null)
+    public static function get(string $key, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
@@ -129,9 +131,9 @@ class UserPreferences
      *
      * @param string $key
      * @param mixed $value
-     * @param int|null $userId
+     * @param int|string|null $userId
      */
-    public static function set(string $key, $value, ?int $userId = null)
+    public static function set(string $key, $value, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
@@ -155,10 +157,10 @@ class UserPreferences
      * Returns true if restored to default, false if preference was deleted.
      *
      * @param string $key
-     * @param int|null $userId
+     * @param int|string|null $userId
      * @return bool
      */
-    public static function reset(string $key, ?int $userId = null)
+    public static function reset(string $key, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
@@ -178,10 +180,10 @@ class UserPreferences
      * Check if a preference exists for a user.
      *
      * @param string $key
-     * @param int|null $userId
+     * @param int|string|null $userId
      * @return bool
      */
-    public static function has(string $key, ?int $userId = null)
+    public static function has(string $key, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
@@ -191,10 +193,10 @@ class UserPreferences
     /**
      * Get all preferences as an object.
      *
-     * @param int|null $userId
+     * @param int|string|null $userId
      * @return object
      */
-    public static function all(?int $userId = null)
+    public static function all(mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
@@ -204,9 +206,9 @@ class UserPreferences
     /**
      * Save all preferences to the database.
      *
-     * @param int|null $userId
+     * @param int|string|null $userId
      */
-    protected static function save(?int $userId = null)
+    protected static function save(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
         DB::table(config('user-preferences.database.table'))
@@ -219,9 +221,9 @@ class UserPreferences
     /**
      * Reset the cache for a given user.
      *
-     * @param int|null $userId
+     * @param int|string|null $userId
      */
-    protected static function resetCache(?int $userId = null)
+    protected static function resetCache(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
         Cache::forget(config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix'));
