@@ -19,7 +19,7 @@ class UserPreferencesServiceProvider extends PackageServiceProvider
 
     public function packageRegistered(): void
     {
-        $this->app->singleton('user-preferences', fn() => new UserPreferences());
+        $this->app->singleton('user-preferences', fn () => new UserPreferences);
 
         $this->app->alias('user-preferences', UserPreferences::class);
     }
