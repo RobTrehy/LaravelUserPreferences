@@ -35,7 +35,6 @@
     "autoload": {
         "psr-4": {
             "RobTrehy\\LaravelUserPreferences\\": "src/",
-            "RobTrehy\\LaravelUserPreferences\\Factories\\": "tests/database/factories/"
         }
     },
     "autoload-dev": {
