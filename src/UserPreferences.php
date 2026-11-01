@@ -2,17 +2,16 @@
 
 namespace RobTrehy\LaravelUserPreferences;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Console\Exception\InvalidArgumentException;
 
 /**
  * Class UserPreferences
  *
  * This class handles the user preferences in the application.
- *
- * @package RobTrehy\LaravelUserPreferences
  */
 class UserPreferences
 {
@@ -40,7 +39,7 @@ class UserPreferences
     /**
      * Check for preferences, load if not already loaded for this user.
      *
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      */
     protected static function preferencesLoaded(mixed $userId = null)
     {
@@ -59,7 +58,7 @@ class UserPreferences
      *
      * If the preferences column is empty, the default preferences will be loaded from config.
      *
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      */
     protected static function getPreferences(mixed $userId = null)
     {
@@ -69,7 +68,7 @@ class UserPreferences
         // arbitrary classes (e.g. Collections) from the cache by default.
         $column = config('user-preferences.database.column');
         $rawPreferences = Cache::rememberForever(
-            config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix'),
+            config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix'),
             function () use ($userId, $column) {
                 return DB::table(config('user-preferences.database.table'))
                     ->where(config('user-preferences.database.primary_key'), $userId)
@@ -96,7 +95,7 @@ class UserPreferences
     /**
      * Set the default preferences for a user
      *
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      */
     public static function setDefaultPreferences(mixed $userId = null)
     {
@@ -109,8 +108,7 @@ class UserPreferences
      *
      * Returns the preference if set, otherwise returns the default value from config.
      *
-     * @param string $key
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      * @return mixed
      */
     public static function get(string $key, mixed $userId = null)
@@ -120,7 +118,8 @@ class UserPreferences
         if (isset(self::$preferencesCache[$userId]->{$key})) {
             return self::$preferencesCache[$userId]->{$key};
         }
-        return config('user-preferences.defaults.' . $key, null);
+
+        return config('user-preferences.defaults.'.$key, null);
     }
 
     /**
@@ -129,21 +128,21 @@ class UserPreferences
      * Flushes the cache for this key/user so it's loaded next time.
      * Checks the data type against defaults and saves to the database.
      *
-     * @param string $key
-     * @param mixed $value
-     * @param int|string|null $userId
+     * @param  mixed  $value
+     * @param  int|string|null  $userId
      */
     public static function set(string $key, $value, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
 
-        if (config('user-preferences.defaults.' . $key)
-            && gettype($value) !== gettype(config('user-preferences.defaults.' . $key))
+        if (
+            config('user-preferences.defaults.'.$key)
+            && gettype($value) !== gettype(config('user-preferences.defaults.'.$key))
         ) {
             throw new InvalidArgumentException(
-                'The expected type is "' . gettype(config('user-preferences.defaults.' . $key)) .
-                '"! "' . gettype($value) . '" was given.'
+                'The expected type is "'.gettype(config('user-preferences.defaults.'.$key)).
+                    '"! "'.gettype($value).'" was given.'
             );
         }
 
@@ -156,8 +155,7 @@ class UserPreferences
      *
      * Returns true if restored to default, false if preference was deleted.
      *
-     * @param string $key
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      * @return bool
      */
     public static function reset(string $key, mixed $userId = null)
@@ -165,48 +163,51 @@ class UserPreferences
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
 
-        if (config('user-preferences.defaults.' . $key)) {
-            self::$preferencesCache[$userId]->{$key} = config('user-preferences.defaults.' . $key);
+        if (config('user-preferences.defaults.'.$key)) {
+            self::$preferencesCache[$userId]->{$key} = config('user-preferences.defaults.'.$key);
             self::save($userId);
+
             return true;
         }
 
         unset(self::$preferencesCache[$userId]->{$key});
         self::save($userId);
+
         return false;
     }
 
     /**
      * Check if a preference exists for a user.
      *
-     * @param string $key
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      * @return bool
      */
     public static function has(string $key, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
+
         return isset(self::$preferencesCache[$userId]->{$key});
     }
 
     /**
      * Get all preferences as an object.
      *
-     * @param int|string|null $userId
-     * @return object
+     * @param  int|string|null  $userId
+     * @return mixed
      */
     public static function all(mixed $userId = null)
     {
         self::preferencesLoaded($userId);
         $userId = $userId ?? Auth::id();
+
         return json_decode(json_encode(self::$preferencesCache[$userId]), true);
     }
 
     /**
      * Save all preferences to the database.
      *
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      */
     protected static function save(mixed $userId = null)
     {
@@ -221,12 +222,12 @@ class UserPreferences
     /**
      * Reset the cache for a given user.
      *
-     * @param int|string|null $userId
+     * @param  int|string|null  $userId
      */
     protected static function resetCache(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
-        Cache::forget(config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix'));
+        Cache::forget(config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix'));
     }
 
     // ------------------------------------------------------------------
@@ -236,52 +237,51 @@ class UserPreferences
     /**
      * Get preferences for a specific user instance or ID.
      *
-     * @param string $key
-     * @param \Illuminate\Contracts\Auth\Authenticatable|int|null $user
+     * @param  Authenticatable|int|null  $user
      * @return mixed
      */
     public static function getForUser(string $key, $user)
     {
-        $userId = $user instanceof \Illuminate\Contracts\Auth\Authenticatable ? $user->getAuthIdentifier() : $user;
+        $userId = $user instanceof Authenticatable ? $user->getAuthIdentifier() : $user;
+
         return self::get($key, $userId);
     }
 
     /**
      * Set preference for a specific user instance or ID.
      *
-     * @param string $key
-     * @param mixed $value
-     * @param \Illuminate\Contracts\Auth\Authenticatable|int|null $user
+     * @param  mixed  $value
+     * @param  Authenticatable|int|null  $user
      */
     public static function setForUser(string $key, $value, $user)
     {
-        $userId = $user instanceof \Illuminate\Contracts\Auth\Authenticatable ? $user->getAuthIdentifier() : $user;
+        $userId = $user instanceof Authenticatable ? $user->getAuthIdentifier() : $user;
         self::set($key, $value, $userId);
     }
 
     /**
      * Reset preference for a specific user instance or ID.
      *
-     * @param string $key
-     * @param \Illuminate\Contracts\Auth\Authenticatable|int|null $user
+     * @param  Authenticatable|int|null  $user
      * @return bool
      */
     public static function resetForUser(string $key, $user)
     {
-        $userId = $user instanceof \Illuminate\Contracts\Auth\Authenticatable ? $user->getAuthIdentifier() : $user;
+        $userId = $user instanceof Authenticatable ? $user->getAuthIdentifier() : $user;
+
         return self::reset($key, $userId);
     }
 
     /**
      * Check if a preference exists for a specific user instance or ID.
      *
-     * @param string $key
-     * @param \Illuminate\Contracts\Auth\Authenticatable|int|null $user
+     * @param  Authenticatable|int|null  $user
      * @return bool
      */
     public static function hasForUser(string $key, $user)
     {
-        $userId = $user instanceof \Illuminate\Contracts\Auth\Authenticatable ? $user->getAuthIdentifier() : $user;
+        $userId = $user instanceof Authenticatable ? $user->getAuthIdentifier() : $user;
+
         return self::has($key, $userId);
     }
 }

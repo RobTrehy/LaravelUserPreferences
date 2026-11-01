@@ -2,44 +2,25 @@
 
 namespace RobTrehy\LaravelUserPreferences;
 
-use Illuminate\Support\ServiceProvider;
+use Spatie\LaravelPackageTools\Package;
+use Spatie\LaravelPackageTools\PackageServiceProvider;
 
-class UserPreferencesServiceProvider extends ServiceProvider
+class UserPreferencesServiceProvider extends PackageServiceProvider
 {
-    /**
-     * Perform post-registration booting of services.
-     *
-     * @return void
-     */
-    public function boot()
+    public function configurePackage(Package $package): void
     {
-        if ($this->app->runningInConsole()) {
-            // Export the config
-            $this->publishes([
-                __DIR__ . '/config/user-preferences.php' => config_path('user-preferences.php'),
-            ], 'config');
-
-            // Export the migration
-            if (! class_exists('AddPreferencesToTable')) {
-                $this->publishes([
-                    __DIR__ . '/database/migrations/add_preferences_to_table.php.stub'
-                    => database_path('migrations/' . date('Y_m_d_His', time()) . '_add_preferences_to_table.php'),
-                ], 'migrations');
-            }
-        }
+        $package
+            ->name('laravel-user-preferences')
+            ->hasConfigFile('user-preferences')
+            ->hasMigrations([
+                'add_preferences_to_table',
+            ]);
     }
 
-    /**
-     * Register the application services.
-     *
-     * @return void
-     */
-    public function register()
+    public function packageRegistered(): void
     {
         $this->app->singleton('user-preferences', fn() => new UserPreferences());
 
-        $this->app->alias(UserPreferences::class, 'user-preferences');
-
-        $this->mergeConfigFrom(__DIR__.'/config/user-preferences.php', 'user-preferences');
+        $this->app->alias('user-preferences', UserPreferences::class);
     }
 }
