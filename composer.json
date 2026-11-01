@@ -1,33 +1,62 @@
 {
     "name": "robtrehy/laravel-user-preferences",
     "description": "A package for Laravel to store user preferences for your project.",
-    "type": "library",
+    "keywords": [
+        "RobTrehy",
+        "laravel",
+        "laravel-user-preferences"
+    ],
+    "homepage": "https://github.com/robtrehy/laravel-user-preferences",
     "license": "MIT",
     "authors": [
         {
             "name": "Rob Trehy",
-            "email": "robert@trehy.co.uk"
+            "email": "robert@trehy.co.uk",
+            "role": "Developer"
         }
     ],
     "require": {
-        "php": "^8.1",
-        "laravel/framework": "^10.0|^11.0|^12.0|^13.0"
+        "php": "^8.4",
+        "illuminate/contracts": "^12.0|| ^13.0",
+        "spatie/laravel-package-tools": "^1.16"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.5|^11.0|^12.0",
-        "squizlabs/php_codesniffer": "^3.6|^3.7",
-        "nunomaduro/collision": "^7.0|^8.0",
-        "orchestra/testbench": "^8.20|^9.0|^10.2|^11.0"
+        "laravel/pint": "^1.14",
+        "nunomaduro/collision": "^8.8",
+        "larastan/larastan": "^3.0",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-arch": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0"
     },
     "autoload": {
         "psr-4": {
-            "RobTrehy\\LaravelUserPreferences\\": "src/"
+            "RobTrehy\\LaravelUserPreferences\\": "src/",
+            "RobTrehy\\LaravelUserPreferences\\Factories\\": "tests/database/factories/"
         }
     },
     "autoload-dev": {
         "psr-4": {
             "RobTrehy\\LaravelUserPreferences\\Tests\\": "tests/",
-            "RobTrehy\\LaravelUserPreferences\\Factories\\": "tests/database/factories/"
+            "Workbench\\App\\": "workbench/app/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": "@composer run prepare",
+        "prepare": "@php vendor/bin/testbench package:discover --ansi",
+        "analyse": "vendor/bin/phpstan analyse",
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
         }
     },
     "extra": {
@@ -36,14 +65,9 @@
                 "RobTrehy\\LaravelUserPreferences\\UserPreferencesServiceProvider"
             ],
             "aliases": {
-                "UserPreferences": "RobTrehy\\LaravelUserPreferences\\UserPreferencesFacade"
+                "UserPreferences": "RobTrehy\\LaravelUserPreferences\\Facades\\LaravelUserPreferences"
             }
         }
-    },
-    "scripts": {
-        "post-autoload-dump": [
-            "@php ./vendor/bin/phpunit"
-        ]
     },
     "minimum-stability": "dev",
     "prefer-stable": true
