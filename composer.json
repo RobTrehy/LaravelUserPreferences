@@ -34,7 +34,7 @@
     },
     "autoload": {
         "psr-4": {
-            "RobTrehy\\LaravelUserPreferences\\": "src/",
+            "RobTrehy\\LaravelUserPreferences\\": "src/"
         }
     },
     "autoload-dev": {
