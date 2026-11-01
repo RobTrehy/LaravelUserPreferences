@@ -1,33 +1,42 @@
 # Laravel User Preferences
-![](https://img.shields.io/github/actions/workflow/status/RobTrehy/LaravelUserPreferences/tests.yml?branch=master&style=flat-square)
-![](https://img.shields.io/github/license/RobTrehy/LaravelUserPreferences?style=flat-square)
-![](https://img.shields.io/github/languages/code-size/RobTrehy/LaravelUserPreferences?style=flat-square)
-![](https://img.shields.io/packagist/v/robtrehy/laravel-user-preferences?style=flat-square)
-![](https://img.shields.io/packagist/dt/robtrehy/laravel-user-preferences?style=flat-square)
+## A package for Laravel to store user preferences for your project.
+
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/robtrehy/laravel-user-preferences.svg?style=flat-square)](https://packagist.org/packages/robtrehy/laravel-user-preferences)
+[![GitHub Tests Action Status](https://github.com/RobTrehy/LaravelUserPreferences/actions/workflows/run-tests.yml/badge.svg)](https://github.com/RobTrehy/LaravelUserPreferences/actions/workflows/run-tests.yml)
+[![GitHub Code Style Action Status](https://github.com/RobTrehy/LaravelUserPreferences/actions/workflows/fix-php-code-style-issues.yml/badge.svg)](https://github.com/RobTrehy/LaravelUserPreferences/actions/workflows/fix-php-code-style-issues.yml)
+[![Total Downloads](https://img.shields.io/packagist/dt/robtrehy/laravel-user-preferences.svg?style=flat-square)](https://packagist.org/packages/robtrehy/laravel-user-preferences)
+
 
 This is a package for Laravel that can be used to store and access preferences of the currently authenticated user.
 The preferences are stored as JSON in a single database column. The default configuration stores this alongside the user record in 
 the `users` table.
 
 ## Installation
-1. Run `composer require robtrehy/laravel-user-preferences` to include this in your project.
-2. Publish the config file with the following command
-    ```
-    php artisan vendor:publish --provider="RobTrehy\LaravelUserPreferences\UserPreferencesServiceProvider" --tag="config"
-    ```
-3. Modify the published configuration file to your requirements. The file is located at `config/user-preferences.php`.
-4. Add the `preferences` column to the database. A migration file is included, just run the following command
-    ```
-    php artisan vendor:publish --provider="RobTrehy\LaravelUserPreferences\UserPreferencesServiceProvider" --tag="migrations" && php artisan migrate
-    ```
-    This will add the column defined in your configuration file to the table defined in your configuration file.
+
+You can install the package via composer:
+
+```bash
+composer require robtrehy/laravel-user-preferences
+```
+
+You can publish the config file with:
+
+```bash
+php artisan vendor:publish --tag="laravel-user-preferences-config"
+```
+
+
+You can publish and run the migrations with:
+
+```bash
+php artisan vendor:publish --tag="laravel-user-preferences-migrations"
+php artisan migrate
+```
+
+This will add the column defined in your configuration file to the table defined in your configuration file.
 
 ## Configuration
 Open `config/user-preferences.php` to adjust the package's configuration. 
-
-If this file doesn't exist, run 
-`php artisan vendor:publish --provider="RobTrehy\LaravelUserPreferences\UserPreferencesServiceProvider" --tag="config"` 
-to create the default configuration file.
 
 Set `table`, `column`, and `primary_key` to match your requirements. `primary_key` should be the users id.
 
@@ -96,7 +105,7 @@ All preferences are saved automatically when `UserPreferences::set()` is called.
 
 ---
 
-## New: Arbitrary User Methods
+## Arbitrary User Methods
 
 You can now work with preferences for **any user instance or ID**, not just the currently authenticated user.
 
