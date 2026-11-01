@@ -1,285 +1,229 @@
-<?php
 
-namespace RobTrehy\LaravelUserPreferences\Tests;
+<?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use InvalidArgumentException;
 use RobTrehy\LaravelUserPreferences\Tests\Models\User;
 use RobTrehy\LaravelUserPreferences\UserPreferences;
 
-class PreferencesTest extends TestCase
+uses(RefreshDatabase::class);
+
+/**
+ * Reset the package's internal preference caches.
+ */
+function resetPreferencesCache(): void
 {
-    use RefreshDatabase;
+    $reflection = new ReflectionClass(UserPreferences::class);
 
-    public function testCanSetAndGetAPreference()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
-
-        UserPreferences::set('test_key', 'test_value');
-        $value = UserPreferences::get('test_key');
-
-        $this->assertEquals('test_value', $value);
+    foreach (['preferencesCache', 'hasLoadedCache'] as $property) {
+        $reflection->getProperty($property)->setValue([]);
     }
 
-    public function testGetPreferencesLoadsFromDatabase()
-    {
-        $user = User::factory()->create();
+    Cache::flush();
+}
 
-        $rawPreferences = ['foo' => 'bar'];
-        DB::table(config('user-preferences.database.table'))
-            ->updateOrInsert(
-                [config('user-preferences.database.primary_key') => $user->id],
-                [config('user-preferences.database.column') => json_encode($rawPreferences)]
-            );
+it('can set and get a preference', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]); // reset all users
+    UserPreferences::set('test_key', 'test_value');
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]); // reset all users
-            
-        Cache::flush();
+    expect(UserPreferences::get('test_key'))->toBe('test_value');
+});
 
-        Auth::login($user);
+it('loads preferences from the database', function () {
+    $user = User::factory()->create();
 
-        $value = UserPreferences::get('foo');
+    DB::table(config('user-preferences.database.table'))
+        ->updateOrInsert(
+            [config('user-preferences.database.primary_key') => $user->id],
+            [config('user-preferences.database.column') => json_encode(['foo' => 'bar'])]
+        );
 
-        $this->assertEquals('bar', $value);
-    }
-    
-    public function testGetPreferencesUsesDefaultsWhenNoDataExists()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    resetPreferencesCache();
 
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]); // reset all users
+    Auth::login($user);
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]); // reset all users
+    expect(UserPreferences::get('foo'))->toBe('bar');
+});
 
-        Cache::flush();
+it('uses default preferences when no data exists', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->delete();
+    resetPreferencesCache();
 
-        $value = UserPreferences::get('some_default_key');
+    DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->delete();
 
-        $this->assertEquals(config('user-preferences.defaults.some_default_key'), $value);
-    }
+    expect(UserPreferences::get('some_default_key'))
+        ->toBe(config('user-preferences.defaults.some_default_key'));
+});
 
-    public function testSetDefaultPreferencesSavesDefaultsToDatabase()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+it('saves default preferences to the database', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]); // reset all users
+    resetPreferencesCache();
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]); // reset all users
+    UserPreferences::setDefaultPreferences();
 
-        Cache::flush();
+    $row = DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->first();
 
-        UserPreferences::setDefaultPreferences();
+    expect($row)->not->toBeNull();
 
-        $row = DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->first();
+    $storedPreferences = json_decode(
+        $row->{config('user-preferences.database.column')},
+        true
+    );
 
-        $this->assertNotNull($row);
+    expect($storedPreferences)->toEqual(config('user-preferences.defaults'));
+});
 
-        $storedPreferences = json_decode($row->{config('user-preferences.database.column')}, true);
-        $this->assertEquals(config('user-preferences.defaults'), $storedPreferences);
-    }
+it('throws an exception when setting an invalid preference type', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-    public function testSetThrowsExceptionForInvalidType()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    config()->set('user-preferences.defaults.test_default_key', 'default_string');
 
-        config()->set('user-preferences.defaults.test_default_key', 'default_string');
+    UserPreferences::set('test_default_key', 123);
+})->throws(
+    InvalidArgumentException::class,
+    'The expected type is "string"! "integer" was given.'
+);
 
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The expected type is "string"! "integer" was given.');
+it('restores the default value when resetting a preference', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        UserPreferences::set('test_default_key', 123);
-    }
+    config()->set('user-preferences.defaults.reset_key', 'default_value');
 
-    public function testResetRestoresDefaultValue()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    UserPreferences::set('reset_key', 'custom_value');
 
-        config()->set('user-preferences.defaults.reset_key', 'default_value');
+    expect(UserPreferences::get('reset_key'))->toBe('custom_value');
 
-        UserPreferences::set('reset_key', 'custom_value');
-        $this->assertEquals('custom_value', UserPreferences::get('reset_key'));
+    $result = UserPreferences::reset('reset_key');
 
-        $result = UserPreferences::reset('reset_key');
+    expect($result)->toBeTrue()
+        ->and(UserPreferences::get('reset_key'))->toBe('default_value');
+});
 
-        $this->assertTrue($result);
-        $this->assertEquals('default_value', UserPreferences::get('reset_key'));
-    }
+it('returns false when a preference is not set', function () {
+    $value = UserPreferences::has('key_not_set');
 
-    public function testCanCheckIfPreferenceIsNotSet()
-    {
-        $value = UserPreferences::has('key_not_set');
+    expect($value)->toBeBool()->toBeFalse();
+});
 
-        $this->assertIsBool($value);
-        $this->assertFalse($value);
-    }
+it('returns true when a preference is set', function () {
+    UserPreferences::set('key_set', 'some_value');
 
-    public function testCanCheckIfPreferenceIsSet()
-    {
-        UserPreferences::set('key_set', 'some_value');
-        $value = UserPreferences::has('key_set');
+    $value = UserPreferences::has('key_set');
 
-        $this->assertIsBool($value);
-        $this->assertTrue($value);
-    }
+    expect($value)->toBeBool()->toBeTrue();
+});
 
-    public function testAllReturnsAllPreferences()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+it('returns all preferences', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        UserPreferences::set('key1', 'value1');
-        UserPreferences::set('key2', 'value2');
+    UserPreferences::set('key1', 'value1');
+    UserPreferences::set('key2', 'value2');
 
-        $allPreferences = UserPreferences::all();
+    $allPreferences = UserPreferences::all();
 
-        $this->assertIsArray($allPreferences);
-        $this->assertEquals('value1', $allPreferences['key1']);
-        $this->assertEquals('value2', $allPreferences['key2']);
-    }
+    expect($allPreferences)->toBeArray()
+        ->and($allPreferences['key1'])->toBe('value1')
+        ->and($allPreferences['key2'])->toBe('value2');
+});
 
-    public function testAllReturnsDefaultPreferencesWhenNoDataExists()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+it('returns default preferences when no data exists', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        // Set up some defaults in the config for this test
-        config()->set('user-preferences.defaults.test_key1', 'value1');
-        config()->set('user-preferences.defaults.test_key2', 'value2');
+    config()->set('user-preferences.defaults.test_key1', 'value1');
+    config()->set('user-preferences.defaults.test_key2', 'value2');
 
-        // Reset internal caches
-        $reflection = new \ReflectionClass(UserPreferences::class);
+    resetPreferencesCache();
 
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]);
+    DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->delete();
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]);
+    $allPreferences = UserPreferences::all();
 
-        // Ensure cache and database are empty
-        Cache::flush();
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->delete();
+    expect($allPreferences)->toBeArray()
+        ->and($allPreferences['test_key1'])->toBe('value1')
+        ->and($allPreferences['test_key2'])->toBe('value2');
+});
 
-        $allPreferences = UserPreferences::all();
+it('applies defaults when the database preferences column is null', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $this->assertIsArray($allPreferences);
-        $this->assertEquals('value1', $allPreferences['test_key1']);
-        $this->assertEquals('value2', $allPreferences['test_key2']);
-    }
+    resetPreferencesCache();
 
-    public function testAllAppliesDefaultsWhenDatabaseColumnIsNull()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->update([config('user-preferences.database.column') => null]);
 
-        // Clear caches
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]);
+    $defaults = config('user-preferences.defaults');
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]);
+    expect(UserPreferences::all())->toBeArray()->toEqual($defaults);
+});
 
-        Cache::flush();
-
-        // Make the preferences column null
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->update([config('user-preferences.database.column') => null]);
-
-        $defaults = config('user-preferences.defaults');
-
-        $allPreferences = UserPreferences::all();
-
-        $this->assertIsArray($allPreferences);
-        $this->assertEquals($defaults, $allPreferences);
-    }
-
-    // --------------------------------------------------------
-    // Tests for the new "ForUser" methods
-    // --------------------------------------------------------
-
-    public function testCanSetAndGetPreferenceForSpecificUser()
-    {
+describe('ForUser methods', function () {
+    it('can set and get preferences for specific users', function () {
         $user1 = User::factory()->create();
         $user2 = User::factory()->create();
 
         UserPreferences::setForUser('user_key', 'value1', $user1);
         UserPreferences::setForUser('user_key', 'value2', $user2);
 
-        $this->assertEquals('value1', UserPreferences::getForUser('user_key', $user1));
-        $this->assertEquals('value2', UserPreferences::getForUser('user_key', $user2));
-    }
+        expect(UserPreferences::getForUser('user_key', $user1))->toBe('value1')
+            ->and(UserPreferences::getForUser('user_key', $user2))->toBe('value2');
+    });
 
-    public function testHasForUserWorksCorrectly()
-    {
+    it('checks whether a preference exists for a specific user', function () {
         $user = User::factory()->create();
 
-        $this->assertFalse(UserPreferences::hasForUser('missing_key', $user));
+        expect(UserPreferences::hasForUser('missing_key', $user))->toBeFalse();
 
         UserPreferences::setForUser('exists_key', 'value', $user);
-        $this->assertTrue(UserPreferences::hasForUser('exists_key', $user));
-    }
 
-    public function testLoggedInUserIsNotChangedWhenUsingSetForUser()
-    {
+        expect(UserPreferences::hasForUser('exists_key', $user))->toBeTrue();
+    });
+
+    it('does not change the authenticated user when setting another user preference', function () {
         $user1 = User::factory()->create();
         $user2 = User::factory()->create();
 
         Auth::login($user1);
-        $this->assertEquals($user1->id, Auth::id());
+
+        expect(Auth::id())->toBe($user1->id);
 
         UserPreferences::setForUser('some_key', 'value_for_user2', $user2);
 
-        $this->assertEquals($user1->id, Auth::id());
+        expect(Auth::id())->toBe($user1->id)
+            ->and(UserPreferences::getForUser('some_key', $user2))
+            ->toBe('value_for_user2');
+    });
 
-        $this->assertEquals('value_for_user2', UserPreferences::getForUser('some_key', $user2));
-    }
-
-    public function testResetForUserResetsPreference()
-    {
+    it('resets a preference for a specific user', function () {
         $user = User::factory()->create();
 
         UserPreferences::setForUser('reset_key', 'custom_value', $user);
-        $this->assertEquals('custom_value', UserPreferences::getForUser('reset_key', $user));
+
+        expect(UserPreferences::getForUser('reset_key', $user))
+            ->toBe('custom_value');
 
         UserPreferences::resetForUser('reset_key', $user);
-        $this->assertEquals(config('user-preferences.defaults.reset_key', null), UserPreferences::getForUser('reset_key', $user));
-    }
-}
+
+        expect(UserPreferences::getForUser('reset_key', $user))
+            ->toBe(config('user-preferences.defaults.reset_key', null));
+    });
+});

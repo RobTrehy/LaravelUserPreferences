@@ -2,17 +2,22 @@
 
 namespace RobTrehy\LaravelUserPreferences\Tests;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Orchestra\Testbench\TestCase as Orchestra;
 use RobTrehy\LaravelUserPreferences\UserPreferencesServiceProvider;
 
-class TestCase extends \Orchestra\Testbench\TestCase
+class TestCase extends Orchestra
 {
-    /**
-     * Get package providers.
-     *
-     * @param  \Illuminate\Foundation\Application  $app
-     *
-     * @return array
-     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Factory::guessFactoryNamesUsing(
+            fn (string $modelName) => 'RobTrehy\\LaravelUserPreferences\\Tests\\Database\\Factories\\'
+                .class_basename($modelName).'Factory'
+        );
+    }
+
     protected function getPackageProviders($app)
     {
         return [
@@ -20,37 +25,13 @@ class TestCase extends \Orchestra\Testbench\TestCase
         ];
     }
 
-    /**
-     * Override application aliases.
-     *
-     * @param  \Illuminate\Foundation\Application  $app
-     *
-     * @return array
-     */
-    protected function overrideApplicationProviders($app)
-    {
-        return [
-            'UserPreferences' => 'RobTrehy\LaravelUserPreferences\UserPreferencesFacade',
-        ];
-    }
-
-    /**
-     * Ignore package discovery from.
-     *
-     * @return array
-     */
-    public function ignorePackageDiscoveriesFrom()
-    {
-        return [];
-    }
-
-    /**
-     * Define database migrations.
-     *
-     * @return void
-     */
     protected function defineDatabaseMigrations()
     {
-        $this->loadMigrationsFrom(__DIR__ . '/database/migrations');
+        $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+    }
+
+    public function getEnvironmentSetUp($app)
+    {
+        config()->set('database.default', 'testing');
     }
 }
