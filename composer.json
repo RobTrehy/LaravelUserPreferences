@@ -39,8 +39,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "RobTrehy\\LaravelUserPreferences\\Tests\\": "tests/",
-            "Workbench\\App\\": "workbench/app/"
+            "RobTrehy\\LaravelUserPreferences\\Tests\\": "tests/"
         }
     },
     "scripts": {

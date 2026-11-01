@@ -1,6 +1,6 @@
 <?php
 
-namespace RobTrehy\LaravelUserPreferences\Factories;
+namespace RobTrehy\LaravelUserPreferences\Tests\Database\Factories;
 
 use Illuminate\Support\Str;
 use Orchestra\Testbench\Factories\UserFactory as TestbenchUserFactory;
