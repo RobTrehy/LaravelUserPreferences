@@ -39,7 +39,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "RobTrehy\\LaravelUserPreferences\\Tests\\": "tests/"
+            "RobTrehy\\LaravelUserPreferences\\Tests\\": "tests/",
+            "RobTrehy\\LaravelUserPreferences\\Tests\\Database\\Factories\\": "tests/database/factories/"
         }
     },
     "scripts": {
