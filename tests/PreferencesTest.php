@@ -13,7 +13,7 @@ uses(RefreshDatabase::class);
 /**
  * Reset the package's internal preference caches.
  */
-function resetPreferencesCache(): void
+function resetPreferencesCache(bool $flushSharedCache = true): void
 {
     $reflection = new ReflectionClass(UserPreferences::class);
 
@@ -21,11 +21,62 @@ function resetPreferencesCache(): void
         $reflection->getProperty($property)->setValue([]);
     }
 
-    Cache::flush();
+    if ($flushSharedCache) {
+        Cache::flush();
+    }
 }
 
 beforeEach(function () {
     resetPreferencesCache();
+});
+
+it('reuses shared cached preferences after clearing local state', function ($rawPreferences, $deleteUser, $expected) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'default');
+
+    if ($deleteUser) {
+        $user->delete();
+    } else {
+        DB::table('users')->where('id', $user->id)->update(['preferences' => $rawPreferences]);
+    }
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    try {
+        expect(UserPreferences::get('theme', $user->id))->toBe($expected);
+        expect(DB::getQueryLog())->toHaveCount(1);
+
+        resetPreferencesCache(flushSharedCache: false);
+        DB::flushQueryLog();
+
+        expect(UserPreferences::get('theme', $user->id))->toBe($expected);
+        expect(DB::getQueryLog())->toBeEmpty();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
+    }
+})->with([
+    'null column' => [null, false, 'default'],
+    'missing user' => [null, true, 'default'],
+    'populated column' => ['{"theme":"dark"}', false, 'dark'],
+]);
+
+it('reads existing raw JSON cache entries without querying the database', function () {
+    $user = User::factory()->create();
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    Cache::forever($cacheKey, '{"theme":"legacy"}');
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    try {
+        expect(UserPreferences::get('theme', $user->id))->toBe('legacy');
+        expect(DB::getQueryLog())->toBeEmpty();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
+    }
 });
 
 it('can set and get a preference', function () {

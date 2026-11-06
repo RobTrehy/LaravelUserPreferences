@@ -64,17 +64,19 @@ class UserPreferences
     {
         $userId = $userId ?? Auth::id();
 
-        // Cache the JSON column value only — Laravel 13 disallows unserializing
-        // arbitrary classes (e.g. Collections) from the cache by default.
+        // Wrap the raw JSON value so a null column is cached as a hit.
+        // Use an array to avoid caching objects that require unserialization.
         $column = config('user-preferences.database.column');
-        $rawPreferences = Cache::rememberForever(
+        $cachedPreferences = Cache::rememberForever(
             config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix'),
             function () use ($userId, $column) {
-                return DB::table(config('user-preferences.database.table'))
+                return ['raw' => DB::table(config('user-preferences.database.table'))
                     ->where(config('user-preferences.database.primary_key'), $userId)
-                    ->value($column);
+                    ->value($column)];
             }
         );
+
+        $rawPreferences = self::unwrapCachedPreferences($cachedPreferences);
 
         if (is_null($rawPreferences)) {
             // No row or column is null → use defaults
@@ -90,6 +92,14 @@ class UserPreferences
         }
 
         self::$hasLoadedCache[$userId] = true;
+    }
+
+    /**
+     * Read both enveloped values and existing raw JSON cache entries.
+     */
+    protected static function unwrapCachedPreferences(mixed $cachedPreferences): mixed
+    {
+        return is_array($cachedPreferences) ? $cachedPreferences['raw'] : $cachedPreferences;
     }
 
     /**
