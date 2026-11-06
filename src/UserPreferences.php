@@ -3,7 +3,9 @@
 namespace RobTrehy\LaravelUserPreferences;
 
 use Closure;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\RecordNotFoundException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +25,17 @@ class UserPreferences
      */
     protected static $preferencesCache = [];
 
+    protected static function resolveUserId(mixed $userId): mixed
+    {
+        $userId = $userId ?? Auth::id();
+
+        if ($userId === null) {
+            throw new AuthenticationException;
+        }
+
+        return $userId;
+    }
+
     /**
      * Clear process-local preferences without invalidating the shared cache.
      */
@@ -38,7 +51,7 @@ class UserPreferences
      */
     protected static function preferencesLoaded(mixed $userId = null)
     {
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
         if (DB::connection()->transactionLevel() > 0) {
             // Transactional reads must see this connection's state, never shared cache.
             $rawPreferences = DB::table(config('user-preferences.database.table'))
@@ -67,7 +80,7 @@ class UserPreferences
      */
     protected static function getPreferences(mixed $userId = null)
     {
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
 
         // Wrap the raw JSON value so a null column is cached as a hit.
         // Use an array to avoid caching objects that require unserialization.
@@ -128,7 +141,7 @@ class UserPreferences
     public static function get(string $key, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
         if (isset(self::$preferencesCache[$userId]->{$key})) {
             return self::$preferencesCache[$userId]->{$key};
         }
@@ -147,6 +160,7 @@ class UserPreferences
      */
     public static function set(string $key, $value, mixed $userId = null)
     {
+        $userId = self::resolveUserId($userId);
         $missing = new \stdClass;
         $default = config('user-preferences.defaults.'.$key, $missing);
 
@@ -200,7 +214,7 @@ class UserPreferences
     public static function has(string $key, mixed $userId = null)
     {
         self::preferencesLoaded($userId);
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
 
         return isset(self::$preferencesCache[$userId]->{$key});
     }
@@ -214,7 +228,7 @@ class UserPreferences
     public static function all(mixed $userId = null)
     {
         self::preferencesLoaded($userId);
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
 
         return json_decode(json_encode(self::$preferencesCache[$userId]), true);
     }
@@ -226,14 +240,18 @@ class UserPreferences
      */
     protected static function save(mixed $userId, Closure $mutate): void
     {
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
         $connection = DB::connection();
 
         $preferences = $connection->transaction(function () use ($connection, $userId, $mutate) {
             $query = $connection->table(config('user-preferences.database.table'))
                 ->where(config('user-preferences.database.primary_key'), $userId);
             $column = config('user-preferences.database.column');
-            $rawPreferences = (clone $query)->lockForUpdate()->value($column);
+            $row = (clone $query)->lockForUpdate()->first([$column]);
+            if ($row === null) {
+                throw new RecordNotFoundException('Cannot save preferences: user does not exist.');
+            }
+            $rawPreferences = $row->{$column};
             $preferences = $mutate(self::decodePreferences($rawPreferences));
 
             $query->update([$column => json_encode($preferences, JSON_THROW_ON_ERROR)]);
@@ -263,7 +281,7 @@ class UserPreferences
      */
     protected static function resetCache(mixed $userId = null)
     {
-        $userId = $userId ?? Auth::id();
+        $userId = self::resolveUserId($userId);
         Cache::forget(self::cacheKey($userId));
     }
 

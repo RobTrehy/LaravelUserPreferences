@@ -64,6 +64,8 @@ In the `defaults` array you can set your default values for user preferences.
 
 ## Usage
 
+Calls without an explicit user ID require an authenticated user and throw Illuminate\Auth\AuthenticationException otherwise.
+
 ### Set a preference
 Use this method to set a preference for the **currently authenticated user**:
 ```php
@@ -120,6 +122,8 @@ writers must follow the same locking protocol. SQLite does not provide row-level
 ## Arbitrary User Methods
 
 You can now work with preferences for **any user instance or ID**, not just the currently authenticated user.
+
+Explicit user IDs can be used without authentication. Writes to a user that does not exist throw `Illuminate\Database\RecordNotFoundException`; reads with an explicit missing user ID continue to fall back to configured defaults.
 
 ### Get a preference for a specific user
 ```php

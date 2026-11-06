@@ -1,7 +1,9 @@
 
 <?php
 
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Queue\Job;
+use Illuminate\Database\RecordNotFoundException;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Request;
@@ -575,4 +577,45 @@ it('keeps a valid empty preference object empty', function () {
 
     expect(UserPreferences::all($user->id))->toBe([]);
     expect(UserPreferences::get('theme', $user->id))->toBe('light');
+});
+
+it('requires authentication when no user ID is provided', function ($method, $arguments) {
+    expect(Auth::check())->toBeFalse();
+    UserPreferences::{$method}(...$arguments);
+})->with([
+    ['get', ['theme']],
+    ['has', ['theme']],
+    ['all', []],
+    ['set', ['theme', 'dark']],
+    ['reset', ['theme']],
+    ['setDefaultPreferences', []],
+])->throws(AuthenticationException::class);
+
+it('rejects writes to a missing user without caching phantom preferences', function ($method, $arguments) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    $user->delete();
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+
+    try {
+        UserPreferences::{$method}(...[...$arguments, $user->id]);
+        test()->fail('Expected a missing user exception');
+    } catch (RecordNotFoundException $exception) {
+        expect($exception->getMessage())->toBe('Cannot save preferences: user does not exist.');
+    }
+
+    expect(Cache::has($cacheKey))->toBeFalse();
+    expect(UserPreferences::get('theme', $user->id))->toBeNull();
+})->with([
+    ['set', ['theme', 'phantom']],
+    ['reset', ['theme']],
+    ['setDefaultPreferences', []],
+]);
+
+it('allows writes without authentication when an existing user ID is explicit', function () {
+    $user = User::factory()->create();
+    expect(Auth::check())->toBeFalse();
+    UserPreferences::set('theme', 'dark', $user->id);
+    resetPreferencesCache();
+    expect(UserPreferences::get('theme', $user->id))->toBe('dark');
 });
