@@ -85,14 +85,30 @@ class UserPreferences
         // Wrap the raw JSON value so a null column is cached as a hit.
         // Use an array to avoid caching objects that require unserialization.
         $column = config('user-preferences.database.column');
-        $cachedPreferences = Cache::rememberForever(
-            self::cacheKey($userId),
-            function () use ($userId, $column) {
-                return ['raw' => DB::table(config('user-preferences.database.table'))
+        $cachedPreferences = Cache::get(self::cacheKey($userId));
+        if ($cachedPreferences === null) {
+            $snapshot = self::withCacheLock($userId, static fn () => [
+                'cached' => Cache::get(self::cacheKey($userId)),
+                'version' => Cache::get(self::cacheKey($userId).':version'),
+            ]);
+            $cachedPreferences = $snapshot['cached'];
+
+            if ($cachedPreferences === null) {
+                // Do not hold a leased cache lock across a potentially slow query.
+                $cachedPreferences = ['raw' => DB::table(config('user-preferences.database.table'))
                     ->where(config('user-preferences.database.primary_key'), $userId)
                     ->value($column)];
+
+                self::withCacheLock($userId, static function () use ($userId, $snapshot, $cachedPreferences) {
+                    // A committed writer changes the token before invalidating.
+                    // An overlapping reader may finish its response, but must
+                    // never publish the old document into the shared cache.
+                    if (Cache::get(self::cacheKey($userId).':version') === $snapshot['version']) {
+                        Cache::forever(self::cacheKey($userId), $cachedPreferences);
+                    }
+                });
             }
-        );
+        }
 
         $rawPreferences = self::unwrapCachedPreferences($cachedPreferences);
 
@@ -282,7 +298,18 @@ class UserPreferences
     protected static function resetCache(mixed $userId = null)
     {
         $userId = self::resolveUserId($userId);
-        Cache::forget(self::cacheKey($userId));
+        self::withCacheLock($userId, static function () use ($userId) {
+            Cache::forever(self::cacheKey($userId).':version', bin2hex(random_bytes(16)));
+            Cache::forget(self::cacheKey($userId));
+        });
+    }
+
+    /**
+     * Serialize cache metadata operations and post-commit invalidation for the same user.
+     */
+    protected static function withCacheLock(mixed $userId, Closure $callback): mixed
+    {
+        return Cache::lock(self::cacheKey($userId).':lock', 60)->block(10, $callback);
     }
 
     /**

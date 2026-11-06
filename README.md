@@ -40,8 +40,25 @@ Open `config/user-preferences.php` to adjust the package's configuration.
 
 Set `table`, `column`, and `primary_key` to match your requirements. `primary_key` should be the users id.
 
-Laravel User Preferences uses the Laravel Cache driver to reduce the number of queries on your database. By default Laravel caches using the `file` driver. If you wish to disable this, you can use the `null` driver.
+Laravel User Preferences uses your application's default Laravel cache store to reduce database queries. If you wish to disable shared caching, you can use the `null` driver; preferences are still cached locally within a request or job.
 The cache key supplied by Laravel User Preferences adds a prefix and suffix to the user's `id`. You can supply your own prefix and suffix by changing the `cache.prefix` and `cache.suffix` configuration values.
+
+Laravel's `redis`, `memcached`, `dynamodb`, `database`, `file`, and `array` drivers
+support [atomic locks](https://laravel.com/docs/12.x/cache#atomic-locks):
+
+- `redis`, `memcached`, `dynamodb`, and `database` can share cache data and locks across servers. The `database` driver requires Laravel's cache and cache-lock tables.
+- `file` shares cache data and locks between processes using the same filesystem paths; separate local filesystems on different servers do not coordinate.
+- `array` keeps data and locks within one process and is suitable for tests, rather than coordination between workers.
+- `null` disables shared caching and uses a no-op lock, so there is no shared preference cache to protect.
+
+Custom cache drivers must implement Laravel's atomic lock support. Applications
+running on multiple servers must share the same cache and lock storage.
+Cache misses use short locks
+and an invalidation token to prevent an overlapping reader from caching an old
+value after a write commits. Database queries run outside the cache lock; cache
+hits do not acquire a lock. Locks expire after 60 seconds and wait up to 10 seconds
+before throwing `Illuminate\Contracts\Cache\LockTimeoutException`. Because write
+invalidation runs after commit, this exception can occur after a write has persisted.
 
 In the `defaults` array you can set your default values for user preferences.
 
