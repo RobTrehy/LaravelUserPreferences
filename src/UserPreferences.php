@@ -39,6 +39,16 @@ class UserPreferences
     protected static function preferencesLoaded(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
+        if (DB::connection()->transactionLevel() > 0) {
+            // Transactional reads must see this connection's state, never shared cache.
+            $rawPreferences = DB::table(config('user-preferences.database.table'))
+                ->where(config('user-preferences.database.primary_key'), $userId)
+                ->value(config('user-preferences.database.column'));
+            self::$preferencesCache[$userId] = self::decodePreferences($rawPreferences);
+
+            return;
+        }
+
         if (array_key_exists($userId, self::$preferencesCache)) {
             return;
         }
@@ -104,7 +114,7 @@ class UserPreferences
      */
     public static function setDefaultPreferences(mixed $userId = null)
     {
-        self::save($userId, static fn($preferences) => (object) config('user-preferences.defaults'));
+        self::save($userId, static fn ($preferences) => (object) config('user-preferences.defaults'));
     }
 
     /**
@@ -123,7 +133,7 @@ class UserPreferences
             return self::$preferencesCache[$userId]->{$key};
         }
 
-        return config('user-preferences.defaults.' . $key, null);
+        return config('user-preferences.defaults.'.$key, null);
     }
 
     /**
@@ -138,12 +148,12 @@ class UserPreferences
     public static function set(string $key, $value, mixed $userId = null)
     {
         $missing = new \stdClass;
-        $default = config('user-preferences.defaults.' . $key, $missing);
+        $default = config('user-preferences.defaults.'.$key, $missing);
 
         if ($default !== $missing && gettype($value) !== gettype($default)) {
             throw new InvalidArgumentException(
-                'The expected type is "' . gettype($default) .
-                    '"! "' . gettype($value) . '" was given.'
+                'The expected type is "'.gettype($default).
+                    '"! "'.gettype($value).'" was given.'
             );
         }
 
@@ -165,7 +175,7 @@ class UserPreferences
     public static function reset(string $key, mixed $userId = null)
     {
         $missing = new \stdClass;
-        $default = config('user-preferences.defaults.' . $key, $missing);
+        $default = config('user-preferences.defaults.'.$key, $missing);
         $hasDefault = $default !== $missing;
 
         self::save($userId, static function ($preferences) use ($key, $default, $hasDefault) {
@@ -237,8 +247,13 @@ class UserPreferences
             return $preferences;
         });
 
-        self::$preferencesCache[$userId] = $preferences;
-        self::resetCache($userId);
+        if ($connection->transactionLevel() === 0) {
+            self::$preferencesCache[$userId] = $preferences;
+        } else {
+            // The enclosing transaction can still roll back. Invalidate shared
+            // state only through the after-commit callback registered above.
+            unset(self::$preferencesCache[$userId]);
+        }
     }
 
     /**
@@ -259,7 +274,7 @@ class UserPreferences
      */
     protected static function cacheKey(mixed $userId): string
     {
-        return config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix');
+        return config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix');
     }
 
     // ------------------------------------------------------------------

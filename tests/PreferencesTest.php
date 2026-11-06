@@ -3,7 +3,7 @@
 
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Http\Events\RequestHandled;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Queue\Events\JobExceptionOccurred;
@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\DB;
 use RobTrehy\LaravelUserPreferences\Tests\Models\User;
 use RobTrehy\LaravelUserPreferences\UserPreferences;
 
-uses(RefreshDatabase::class);
+// These tests exercise real commit and shared-cache behaviour; an enclosing
+// test transaction would bypass the shared cache throughout every test.
+uses(DatabaseMigrations::class);
 
 /**
  * Reset the package's internal preference caches.
@@ -30,6 +32,10 @@ function resetPreferencesCache(bool $flushSharedCache = true): void
 }
 
 beforeEach(function () {
+    $this->artisan('migrate', [
+        '--path' => __DIR__.'/database/migrations',
+        '--realpath' => true,
+    ])->assertExitCode(0);
     resetPreferencesCache();
 });
 
@@ -411,4 +417,111 @@ it('does not persist or locally expose an unserializable update', function () {
         resetPreferencesCache();
         expect(UserPreferences::get('theme', $user->id))->toBe('before');
     }
+});
+
+it('keeps shared cache committed and reloads local state after transaction completion', function ($commit) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    UserPreferences::clearLocalCache();
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    $cached = Cache::get($cacheKey);
+
+    DB::beginTransaction();
+    try {
+        UserPreferences::set('theme', 'during', $user->id);
+        expect(UserPreferences::get('theme', $user->id))->toBe('during');
+        expect(Cache::get($cacheKey))->toBe($cached);
+
+        // Simulate a cache miss during the transaction as well.
+        Cache::forget($cacheKey);
+        UserPreferences::clearLocalCache();
+        expect(UserPreferences::get('theme', $user->id))->toBe('during');
+        expect(Cache::has($cacheKey))->toBeFalse();
+        Cache::forever($cacheKey, $cached);
+
+        if ($commit) {
+            DB::commit();
+        } else {
+            DB::rollBack();
+        }
+    } finally {
+        if (DB::transactionLevel() > 0) {
+            DB::rollBack();
+        }
+    }
+
+    expect(Cache::get($cacheKey))->toBe($commit ? null : $cached);
+    expect(UserPreferences::get('theme', $user->id))->toBe($commit ? 'during' : 'before');
+})->with([true, false]);
+
+it('reads direct database changes in a transaction without publishing them', function () {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    DB::beginTransaction();
+    try {
+        DB::table('users')->where('id', $user->id)->update(['preferences' => '{"theme":"uncommitted"}']);
+        expect(UserPreferences::get('theme', $user->id))->toBe('uncommitted');
+        $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+        expect(Cache::has($cacheKey))->toBeFalse();
+    } finally {
+        DB::rollBack();
+    }
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
+});
+
+it('handles nested transaction commits and rollbacks', function ($commitInner, $commitOuter) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    UserPreferences::clearLocalCache();
+    UserPreferences::get('theme', $user->id);
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    $cached = Cache::get($cacheKey);
+
+    DB::beginTransaction();
+    try {
+        UserPreferences::set('theme', 'outer', $user->id);
+        DB::beginTransaction();
+        UserPreferences::set('theme', 'inner', $user->id);
+        expect(UserPreferences::get('theme', $user->id))->toBe('inner');
+        if ($commitInner) {
+            DB::commit();
+        } else {
+            DB::rollBack();
+        }
+        expect(UserPreferences::get('theme', $user->id))->toBe($commitInner ? 'inner' : 'outer');
+        expect(Cache::get($cacheKey))->toBe($cached);
+        if ($commitOuter) {
+            DB::commit();
+        } else {
+            DB::rollBack();
+        }
+    } finally {
+        if (DB::transactionLevel() > 0) {
+            DB::rollBack(0);
+        }
+    }
+
+    expect(Cache::get($cacheKey))->toBe($commitOuter ? null : $cached);
+    expect(UserPreferences::get('theme', $user->id))->toBe($commitOuter
+        ? ($commitInner ? 'inner' : 'outer')
+        : 'before');
+})->with([[true, true], [false, true], [true, false], [false, false]]);
+
+it('discards cached transactional state when an exception rolls back the transaction', function () {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+
+    try {
+        DB::transaction(function () use ($user) {
+            UserPreferences::set('theme', 'discarded', $user->id);
+            expect(UserPreferences::get('theme', $user->id))->toBe('discarded');
+            throw new RuntimeException('Abort transaction');
+        });
+    } catch (RuntimeException $exception) {
+        expect($exception->getMessage())->toBe('Abort transaction');
+    }
+
+    expect(DB::transactionLevel())->toBe(0);
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
 });

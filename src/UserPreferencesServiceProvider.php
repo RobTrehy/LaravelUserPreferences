@@ -2,6 +2,9 @@
 
 namespace RobTrehy\LaravelUserPreferences;
 
+use Illuminate\Database\Events\TransactionBeginning;
+use Illuminate\Database\Events\TransactionCommitted;
+use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobProcessed;
@@ -33,6 +36,9 @@ class UserPreferencesServiceProvider extends PackageServiceProvider
         $clearLocalCache = static fn () => UserPreferences::clearLocalCache();
 
         $this->app['events']->listen([
+            TransactionBeginning::class,
+            TransactionCommitted::class,
+            TransactionRolledBack::class,
             RequestHandled::class,
             JobProcessing::class,
             JobProcessed::class,
