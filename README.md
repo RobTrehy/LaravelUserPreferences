@@ -82,8 +82,8 @@ Reset a single preference for the **currently authenticated user**:
 UserPreferences::reset(string $setting);
 ```
 
-### Reset all default preferences
-Reset all default preferences for the **currently authenticated user**:
+### Reset all preferences to defaults
+Replace all preferences for the **currently authenticated user** with the configured defaults. This removes keys that are not present in the defaults:
 ```php
 UserPreferences::setDefaultPreferences();
 ```
@@ -102,6 +102,18 @@ UserPreferences::has(string $setting);
 
 ### Save a preference
 All preferences are saved automatically when `UserPreferences::set()` is called.
+
+Configured defaults, including `false`, `0`, an empty string, an empty array, and `null`,
+are used for type validation. `reset()` returns `true` for any configured default;
+it deletes the key and returns `false` when no default is configured.
+`has()` continues to treat a `null` value as unset.
+
+Updates read fresh preferences inside a transaction and lock the user row before
+changing it. On databases supporting row locks (such as MySQL with InnoDB and
+PostgreSQL), this preserves changes to other keys made by concurrent package
+writers. Writes to the same key use the last writer's value. Direct database
+writers must follow the same locking protocol. SQLite does not provide row-level
+`FOR UPDATE` locking and may reject competing writes with a lock error.
 
 ---
 

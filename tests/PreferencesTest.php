@@ -341,3 +341,74 @@ describe('ForUser methods', function () {
             ->toBe(config('user-preferences.defaults.reset_key', null));
     });
 });
+
+it('validates types for falsy defaults', function ($default) {
+    config()->set('user-preferences.defaults.falsy', $default);
+
+    UserPreferences::set('falsy', new stdClass, 1);
+})->with([[false], [0], [0.0], [''], [[]], [null]])->throws(InvalidArgumentException::class);
+
+it('restores falsy defaults and reports success', function ($default) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.falsy', $default);
+    DB::table('users')->where('id', $user->id)->update(['preferences' => '{"falsy":"custom"}']);
+
+    expect(UserPreferences::reset('falsy', $user->id))->toBeTrue();
+    $stored = json_decode(DB::table('users')->where('id', $user->id)->value('preferences'), true);
+    expect(array_key_exists('falsy', $stored))->toBeTrue();
+    expect($stored['falsy'])->toEqual($default);
+})->with([[false], [0], [0.0], [''], [[]], [null]]);
+
+it('replaces existing preferences with configured defaults', function () {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults', ['theme' => 'light', 'enabled' => false]);
+    UserPreferences::set('theme', 'dark', $user->id);
+    UserPreferences::set('custom', 'value', $user->id);
+
+    UserPreferences::setDefaultPreferences($user->id);
+    resetPreferencesCache();
+
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'light', 'enabled' => false]);
+});
+
+it('preserves fresh database changes when mutating stale preferences', function ($operation) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'light');
+    UserPreferences::set('theme', 'dark', $user->id);
+    UserPreferences::get('theme', $user->id);
+
+    // Another writer has committed a change since this worker loaded preferences.
+    DB::table('users')->where('id', $user->id)->update([
+        'preferences' => '{"theme":"dark","other":"new"}',
+    ]);
+
+    if ($operation === 'set') {
+        UserPreferences::set('theme', 'blue', $user->id);
+    } elseif ($operation === 'reset') {
+        UserPreferences::reset('theme', $user->id);
+    } else {
+        UserPreferences::reset('other_missing', $user->id);
+    }
+
+    resetPreferencesCache();
+    expect(UserPreferences::get('other', $user->id))->toBe('new');
+    expect(UserPreferences::get('theme', $user->id))->toBe(match ($operation) {
+        'set' => 'blue',
+        'reset' => 'light',
+        default => 'dark',
+    });
+})->with(['set', 'reset', 'delete']);
+
+it('does not persist or locally expose an unserializable update', function () {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+
+    try {
+        UserPreferences::set('theme', INF, $user->id);
+        test()->fail('Expected JSON encoding to fail');
+    } catch (JsonException) {
+        expect(UserPreferences::get('theme', $user->id))->toBe('before');
+        resetPreferencesCache();
+        expect(UserPreferences::get('theme', $user->id))->toBe('before');
+    }
+});

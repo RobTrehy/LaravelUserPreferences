@@ -2,6 +2,7 @@
 
 namespace RobTrehy\LaravelUserPreferences;
 
+use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -72,19 +73,20 @@ class UserPreferences
 
         $rawPreferences = self::unwrapCachedPreferences($cachedPreferences);
 
-        if (is_null($rawPreferences)) {
-            // No row or column is null → use defaults
-            self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
-        } else {
-            $preferences = json_decode($rawPreferences);
-            if (json_last_error() !== JSON_ERROR_NONE || is_null($preferences)) {
-                // Invalid JSON → fallback to defaults
-                self::$preferencesCache[$userId] = (object) config('user-preferences.defaults');
-            } else {
-                self::$preferencesCache[$userId] = $preferences;
-            }
+        self::$preferencesCache[$userId] = self::decodePreferences($rawPreferences);
+    }
+
+    protected static function decodePreferences(?string $rawPreferences): mixed
+    {
+        if ($rawPreferences === null) {
+            return (object) config('user-preferences.defaults');
         }
 
+        $preferences = json_decode($rawPreferences);
+
+        return json_last_error() !== JSON_ERROR_NONE || $preferences === null
+            ? (object) config('user-preferences.defaults')
+            : $preferences;
     }
 
     /**
@@ -96,14 +98,13 @@ class UserPreferences
     }
 
     /**
-     * Set the default preferences for a user
+     * Replace all preferences with configured defaults, removing custom keys.
      *
      * @param  int|string|null  $userId
      */
     public static function setDefaultPreferences(mixed $userId = null)
     {
-        self::preferencesLoaded($userId);
-        self::save($userId);
+        self::save($userId, static fn ($preferences) => (object) config('user-preferences.defaults'));
     }
 
     /**
@@ -136,21 +137,21 @@ class UserPreferences
      */
     public static function set(string $key, $value, mixed $userId = null)
     {
-        self::preferencesLoaded($userId);
-        $userId = $userId ?? Auth::id();
+        $missing = new \stdClass;
+        $default = config('user-preferences.defaults.'.$key, $missing);
 
-        if (
-            config('user-preferences.defaults.'.$key)
-            && gettype($value) !== gettype(config('user-preferences.defaults.'.$key))
-        ) {
+        if ($default !== $missing && gettype($value) !== gettype($default)) {
             throw new InvalidArgumentException(
-                'The expected type is "'.gettype(config('user-preferences.defaults.'.$key)).
+                'The expected type is "'.gettype($default).
                     '"! "'.gettype($value).'" was given.'
             );
         }
 
-        self::$preferencesCache[$userId]->{$key} = $value;
-        self::save($userId);
+        self::save($userId, static function ($preferences) use ($key, $value) {
+            $preferences->{$key} = $value;
+
+            return $preferences;
+        });
     }
 
     /**
@@ -163,20 +164,21 @@ class UserPreferences
      */
     public static function reset(string $key, mixed $userId = null)
     {
-        self::preferencesLoaded($userId);
-        $userId = $userId ?? Auth::id();
+        $missing = new \stdClass;
+        $default = config('user-preferences.defaults.'.$key, $missing);
+        $hasDefault = $default !== $missing;
 
-        if (config('user-preferences.defaults.'.$key)) {
-            self::$preferencesCache[$userId]->{$key} = config('user-preferences.defaults.'.$key);
-            self::save($userId);
+        self::save($userId, static function ($preferences) use ($key, $default, $hasDefault) {
+            if ($hasDefault) {
+                $preferences->{$key} = $default;
+            } else {
+                unset($preferences->{$key});
+            }
 
-            return true;
-        }
+            return $preferences;
+        });
 
-        unset(self::$preferencesCache[$userId]->{$key});
-        self::save($userId);
-
-        return false;
+        return $hasDefault;
     }
 
     /**
@@ -208,17 +210,34 @@ class UserPreferences
     }
 
     /**
-     * Save all preferences to the database.
+     * Apply a mutation to fresh preferences while holding a database row lock.
      *
      * @param  int|string|null  $userId
      */
-    protected static function save(mixed $userId = null)
+    protected static function save(mixed $userId, Closure $mutate): void
     {
         $userId = $userId ?? Auth::id();
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $userId)
-            ->update([config('user-preferences.database.column') => json_encode(self::$preferencesCache[$userId])]);
+        $connection = DB::connection();
 
+        $preferences = $connection->transaction(function () use ($connection, $userId, $mutate) {
+            $query = $connection->table(config('user-preferences.database.table'))
+                ->where(config('user-preferences.database.primary_key'), $userId);
+            $column = config('user-preferences.database.column');
+            $rawPreferences = (clone $query)->lockForUpdate()->value($column);
+            $preferences = $mutate(self::decodePreferences($rawPreferences));
+
+            $query->update([$column => json_encode($preferences, JSON_THROW_ON_ERROR)]);
+
+            // Also invalidate after an enclosing application transaction commits.
+            $connection->afterCommit(static function () use ($userId) {
+                self::resetCache($userId);
+                unset(self::$preferencesCache[$userId]);
+            });
+
+            return $preferences;
+        });
+
+        self::$preferencesCache[$userId] = $preferences;
         self::resetCache($userId);
     }
 
