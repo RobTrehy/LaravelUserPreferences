@@ -81,7 +81,7 @@ In the `defaults` array you can set your default values for user preferences.
 
 ## Usage
 
-Calls without an explicit user ID require an authenticated user and throw Illuminate\Auth\AuthenticationException otherwise.
+Calls without an explicit user ID require an authenticated user and throw `Illuminate\Auth\AuthenticationException` otherwise.
 
 ### Set a preference
 Use this method to set a preference for the **currently authenticated user**:
