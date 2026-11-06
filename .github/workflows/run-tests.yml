@@ -65,3 +65,48 @@ jobs:
 
       - name: Execute tests
         run: vendor/bin/pest --ci
+
+  concurrency:
+    name: PostgreSQL concurrency - Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - laravel: 12.*
+            testbench: 10.*
+          - laravel: 13.*
+            testbench: 11.*
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: preferences_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PREFERENCES_CONCURRENCY_TESTS: '1'
+      CONCURRENCY_DB_HOST: 127.0.0.1
+      CONCURRENCY_DB_PORT: '5432'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pdo_sqlite
+          coverage: none
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction
+      - name: Verify concurrent preference writes
+        run: vendor/bin/pest tests/ConcurrencyTest.php --ci
