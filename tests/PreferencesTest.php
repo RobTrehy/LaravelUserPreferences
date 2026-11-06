@@ -1,285 +1,621 @@
+
 <?php
 
-namespace RobTrehy\LaravelUserPreferences\Tests;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Database\RecordNotFoundException;
+use Illuminate\Foundation\Http\Events\RequestHandled;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use InvalidArgumentException;
 use RobTrehy\LaravelUserPreferences\Tests\Models\User;
 use RobTrehy\LaravelUserPreferences\UserPreferences;
 
-class PreferencesTest extends TestCase
+// These tests exercise real commit and shared-cache behaviour; an enclosing
+// test transaction would bypass the shared cache throughout every test.
+uses(DatabaseMigrations::class);
+
+/**
+ * Reset the package's internal preference caches.
+ */
+function resetPreferencesCache(bool $flushSharedCache = true): void
 {
-    use RefreshDatabase;
+    UserPreferences::clearLocalCache();
 
-    public function testCanSetAndGetAPreference()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
-
-        UserPreferences::set('test_key', 'test_value');
-        $value = UserPreferences::get('test_key');
-
-        $this->assertEquals('test_value', $value);
-    }
-
-    public function testGetPreferencesLoadsFromDatabase()
-    {
-        $user = User::factory()->create();
-
-        $rawPreferences = ['foo' => 'bar'];
-        DB::table(config('user-preferences.database.table'))
-            ->updateOrInsert(
-                [config('user-preferences.database.primary_key') => $user->id],
-                [config('user-preferences.database.column') => json_encode($rawPreferences)]
-            );
-
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]); // reset all users
-
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]); // reset all users
-            
+    if ($flushSharedCache) {
         Cache::flush();
-
-        Auth::login($user);
-
-        $value = UserPreferences::get('foo');
-
-        $this->assertEquals('bar', $value);
     }
-    
-    public function testGetPreferencesUsesDefaultsWhenNoDataExists()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+}
 
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]); // reset all users
+beforeEach(function () {
+    $this->artisan('migrate', [
+        '--path' => __DIR__.'/database/migrations',
+        '--realpath' => true,
+    ])->assertExitCode(0);
+    resetPreferencesCache();
+});
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]); // reset all users
+it('clears local preferences at worker lifecycle boundaries while retaining shared cache', function ($event) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    UserPreferences::get('theme', $user->id);
 
-        Cache::flush();
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    // Simulate another worker updating the shared cache.
+    Cache::forever($cacheKey, ['raw' => '{"theme":"after"}']);
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
 
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->delete();
-
-        $value = UserPreferences::get('some_default_key');
-
-        $this->assertEquals(config('user-preferences.defaults.some_default_key'), $value);
-    }
-
-    public function testSetDefaultPreferencesSavesDefaultsToDatabase()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
-
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]); // reset all users
-
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]); // reset all users
-
-        Cache::flush();
-
-        UserPreferences::setDefaultPreferences();
-
-        $row = DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->first();
-
-        $this->assertNotNull($row);
-
-        $storedPreferences = json_decode($row->{config('user-preferences.database.column')}, true);
-        $this->assertEquals(config('user-preferences.defaults'), $storedPreferences);
+    if ($event === 'terminating') {
+        app()->terminate();
+    } elseif (in_array($event, [JobProcessing::class, JobProcessed::class, JobExceptionOccurred::class], true)) {
+        $job = Mockery::mock(Job::class);
+        $job->shouldReceive('payload')->andReturn([]);
+        app('events')->dispatch($event === JobExceptionOccurred::class
+            ? new $event('testing', $job, new RuntimeException('Failed job'))
+            : new $event('testing', $job));
+    } elseif ($event === RequestHandled::class) {
+        app('events')->dispatch(new RequestHandled(Request::create('/'), new Response));
+    } else {
+        app('events')->dispatch($event);
     }
 
-    public function testSetThrowsExceptionForInvalidType()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    $reflection = new ReflectionClass(UserPreferences::class);
+    expect($reflection->getProperty('preferencesCache')->getValue())->toBeEmpty();
+    expect(Cache::get($cacheKey))->toBe(['raw' => '{"theme":"after"}']);
 
-        config()->set('user-preferences.defaults.test_default_key', 'default_string');
+    DB::enableQueryLog();
+    DB::flushQueryLog();
 
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('The expected type is "string"! "integer" was given.');
+    try {
+        expect(UserPreferences::get('theme', $user->id))->toBe('after');
+        expect(DB::getQueryLog())->toBeEmpty();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
+    }
+})->with([
+    RequestHandled::class,
+    JobProcessing::class,
+    JobProcessed::class,
+    JobExceptionOccurred::class,
+    'Laravel\\Octane\\Events\\RequestReceived',
+    'Laravel\\Octane\\Events\\RequestTerminated',
+    'Laravel\\Octane\\Events\\TaskReceived',
+    'Laravel\\Octane\\Events\\TaskTerminated',
+    'terminating',
+]);
 
-        UserPreferences::set('test_default_key', 123);
+it('reuses shared cached preferences after clearing local state', function ($rawPreferences, $deleteUser, $expected) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'default');
+
+    if ($deleteUser) {
+        $user->delete();
+    } else {
+        DB::table('users')->where('id', $user->id)->update(['preferences' => $rawPreferences]);
     }
 
-    public function testResetRestoresDefaultValue()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
 
-        config()->set('user-preferences.defaults.reset_key', 'default_value');
+    try {
+        expect(UserPreferences::get('theme', $user->id))->toBe($expected);
+        expect(DB::getQueryLog())->toHaveCount(1);
 
-        UserPreferences::set('reset_key', 'custom_value');
-        $this->assertEquals('custom_value', UserPreferences::get('reset_key'));
+        resetPreferencesCache(flushSharedCache: false);
+        DB::flushQueryLog();
 
-        $result = UserPreferences::reset('reset_key');
-
-        $this->assertTrue($result);
-        $this->assertEquals('default_value', UserPreferences::get('reset_key'));
+        expect(UserPreferences::get('theme', $user->id))->toBe($expected);
+        expect(DB::getQueryLog())->toBeEmpty();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
     }
+})->with([
+    'null column' => [null, false, 'default'],
+    'missing user' => [null, true, 'default'],
+    'populated column' => ['{"theme":"dark"}', false, 'dark'],
+]);
 
-    public function testCanCheckIfPreferenceIsNotSet()
-    {
-        $value = UserPreferences::has('key_not_set');
+it('reads existing raw JSON cache entries without querying the database', function () {
+    $user = User::factory()->create();
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    Cache::forever($cacheKey, '{"theme":"legacy"}');
 
-        $this->assertIsBool($value);
-        $this->assertFalse($value);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    try {
+        expect(UserPreferences::get('theme', $user->id))->toBe('legacy');
+        expect(DB::getQueryLog())->toBeEmpty();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
     }
+});
 
-    public function testCanCheckIfPreferenceIsSet()
-    {
-        UserPreferences::set('key_set', 'some_value');
-        $value = UserPreferences::has('key_set');
+it('can set and get a preference', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $this->assertIsBool($value);
-        $this->assertTrue($value);
-    }
+    UserPreferences::set('test_key', 'test_value');
 
-    public function testAllReturnsAllPreferences()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    expect(UserPreferences::get('test_key'))->toBe('test_value');
+});
 
-        UserPreferences::set('key1', 'value1');
-        UserPreferences::set('key2', 'value2');
+it('loads preferences from the database', function () {
+    $user = User::factory()->create();
 
-        $allPreferences = UserPreferences::all();
+    DB::table(config('user-preferences.database.table'))
+        ->updateOrInsert(
+            [config('user-preferences.database.primary_key') => $user->id],
+            [config('user-preferences.database.column') => json_encode(['foo' => 'bar'])]
+        );
 
-        $this->assertIsArray($allPreferences);
-        $this->assertEquals('value1', $allPreferences['key1']);
-        $this->assertEquals('value2', $allPreferences['key2']);
-    }
+    resetPreferencesCache();
 
-    public function testAllReturnsDefaultPreferencesWhenNoDataExists()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    Auth::login($user);
 
-        // Set up some defaults in the config for this test
-        config()->set('user-preferences.defaults.test_key1', 'value1');
-        config()->set('user-preferences.defaults.test_key2', 'value2');
+    expect(UserPreferences::get('foo'))->toBe('bar');
+});
 
-        // Reset internal caches
-        $reflection = new \ReflectionClass(UserPreferences::class);
+it('uses default preferences when no data exists', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]);
+    resetPreferencesCache();
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]);
+    DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->delete();
 
-        // Ensure cache and database are empty
-        Cache::flush();
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->delete();
+    expect(UserPreferences::get('some_default_key'))
+        ->toBe(config('user-preferences.defaults.some_default_key'));
+});
 
-        $allPreferences = UserPreferences::all();
+it('saves default preferences to the database', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $this->assertIsArray($allPreferences);
-        $this->assertEquals('value1', $allPreferences['test_key1']);
-        $this->assertEquals('value2', $allPreferences['test_key2']);
-    }
+    resetPreferencesCache();
 
-    public function testAllAppliesDefaultsWhenDatabaseColumnIsNull()
-    {
-        $user = User::factory()->create();
-        Auth::login($user);
+    UserPreferences::setDefaultPreferences();
 
-        // Clear caches
-        $reflection = new \ReflectionClass(UserPreferences::class);
-        $preferencesCacheProp = $reflection->getProperty('preferencesCache');
-        $preferencesCacheProp->setAccessible(true);
-        $preferencesCacheProp->setValue([]);
+    $row = DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->first();
 
-        $hasLoadedCacheProp = $reflection->getProperty('hasLoadedCache');
-        $hasLoadedCacheProp->setAccessible(true);
-        $hasLoadedCacheProp->setValue([]);
+    expect($row)->not->toBeNull();
 
-        Cache::flush();
+    $storedPreferences = json_decode(
+        $row->{config('user-preferences.database.column')},
+        true
+    );
 
-        // Make the preferences column null
-        DB::table(config('user-preferences.database.table'))
-            ->where(config('user-preferences.database.primary_key'), $user->id)
-            ->update([config('user-preferences.database.column') => null]);
+    expect($storedPreferences)->toEqual(config('user-preferences.defaults'));
+});
 
-        $defaults = config('user-preferences.defaults');
+it('throws an exception when setting an invalid preference type', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-        $allPreferences = UserPreferences::all();
+    config()->set('user-preferences.defaults.test_default_key', 'default_string');
 
-        $this->assertIsArray($allPreferences);
-        $this->assertEquals($defaults, $allPreferences);
-    }
+    UserPreferences::set('test_default_key', 123);
+})->throws(
+    InvalidArgumentException::class,
+    'The expected type is "string"! "integer" was given.'
+);
 
-    // --------------------------------------------------------
-    // Tests for the new "ForUser" methods
-    // --------------------------------------------------------
+it('restores the default value when resetting a preference', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
 
-    public function testCanSetAndGetPreferenceForSpecificUser()
-    {
+    config()->set('user-preferences.defaults.reset_key', 'default_value');
+
+    UserPreferences::set('reset_key', 'custom_value');
+
+    expect(UserPreferences::get('reset_key'))->toBe('custom_value');
+
+    $result = UserPreferences::reset('reset_key');
+
+    expect($result)->toBeTrue()
+        ->and(UserPreferences::get('reset_key'))->toBe('default_value');
+});
+
+it('returns false when a preference is not set', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
+    $value = UserPreferences::has('key_not_set');
+
+    expect($value)->toBeBool()->toBeFalse();
+});
+
+it('returns true when a preference is set', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
+    UserPreferences::set('key_set', 'some_value');
+
+    $value = UserPreferences::has('key_set');
+
+    expect($value)->toBeBool()->toBeTrue();
+});
+
+it('returns all preferences', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
+    UserPreferences::set('key1', 'value1');
+    UserPreferences::set('key2', 'value2');
+
+    $allPreferences = UserPreferences::all();
+
+    expect($allPreferences)->toBeArray()
+        ->and($allPreferences['key1'])->toBe('value1')
+        ->and($allPreferences['key2'])->toBe('value2');
+});
+
+it('returns default preferences when no data exists', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
+    config()->set('user-preferences.defaults.test_key1', 'value1');
+    config()->set('user-preferences.defaults.test_key2', 'value2');
+
+    resetPreferencesCache();
+
+    DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->delete();
+
+    $allPreferences = UserPreferences::all();
+
+    expect($allPreferences)->toBeArray()
+        ->and($allPreferences['test_key1'])->toBe('value1')
+        ->and($allPreferences['test_key2'])->toBe('value2');
+});
+
+it('applies defaults when the database preferences column is null', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
+    resetPreferencesCache();
+
+    DB::table(config('user-preferences.database.table'))
+        ->where(config('user-preferences.database.primary_key'), $user->id)
+        ->update([config('user-preferences.database.column') => null]);
+
+    $defaults = config('user-preferences.defaults');
+
+    expect(UserPreferences::all())->toBeArray()->toEqual($defaults);
+});
+
+describe('ForUser methods', function () {
+    it('can set and get preferences for specific users', function () {
         $user1 = User::factory()->create();
         $user2 = User::factory()->create();
 
         UserPreferences::setForUser('user_key', 'value1', $user1);
         UserPreferences::setForUser('user_key', 'value2', $user2);
 
-        $this->assertEquals('value1', UserPreferences::getForUser('user_key', $user1));
-        $this->assertEquals('value2', UserPreferences::getForUser('user_key', $user2));
-    }
+        expect(UserPreferences::getForUser('user_key', $user1))->toBe('value1')
+            ->and(UserPreferences::getForUser('user_key', $user2))->toBe('value2');
+    });
 
-    public function testHasForUserWorksCorrectly()
-    {
+    it('checks whether a preference exists for a specific user', function () {
         $user = User::factory()->create();
 
-        $this->assertFalse(UserPreferences::hasForUser('missing_key', $user));
+        expect(UserPreferences::hasForUser('missing_key', $user))->toBeFalse();
 
         UserPreferences::setForUser('exists_key', 'value', $user);
-        $this->assertTrue(UserPreferences::hasForUser('exists_key', $user));
-    }
 
-    public function testLoggedInUserIsNotChangedWhenUsingSetForUser()
-    {
+        expect(UserPreferences::hasForUser('exists_key', $user))->toBeTrue();
+    });
+
+    it('does not change the authenticated user when setting another user preference', function () {
         $user1 = User::factory()->create();
         $user2 = User::factory()->create();
 
         Auth::login($user1);
-        $this->assertEquals($user1->id, Auth::id());
+
+        expect(Auth::id())->toBe($user1->id);
 
         UserPreferences::setForUser('some_key', 'value_for_user2', $user2);
 
-        $this->assertEquals($user1->id, Auth::id());
+        expect(Auth::id())->toBe($user1->id)
+            ->and(UserPreferences::getForUser('some_key', $user2))
+            ->toBe('value_for_user2');
+    });
 
-        $this->assertEquals('value_for_user2', UserPreferences::getForUser('some_key', $user2));
-    }
-
-    public function testResetForUserResetsPreference()
-    {
+    it('resets a preference for a specific user', function () {
         $user = User::factory()->create();
 
         UserPreferences::setForUser('reset_key', 'custom_value', $user);
-        $this->assertEquals('custom_value', UserPreferences::getForUser('reset_key', $user));
+
+        expect(UserPreferences::getForUser('reset_key', $user))
+            ->toBe('custom_value');
 
         UserPreferences::resetForUser('reset_key', $user);
-        $this->assertEquals(config('user-preferences.defaults.reset_key', null), UserPreferences::getForUser('reset_key', $user));
+
+        expect(UserPreferences::getForUser('reset_key', $user))
+            ->toBe(config('user-preferences.defaults.reset_key', null));
+    });
+});
+
+it('validates types for falsy defaults', function ($default) {
+    config()->set('user-preferences.defaults.falsy', $default);
+
+    UserPreferences::set('falsy', new stdClass, 1);
+})->with([[false], [0], [0.0], [''], [[]], [null]])->throws(InvalidArgumentException::class);
+
+it('restores falsy defaults and reports success', function ($default) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.falsy', $default);
+    DB::table('users')->where('id', $user->id)->update(['preferences' => '{"falsy":"custom"}']);
+
+    expect(UserPreferences::reset('falsy', $user->id))->toBeTrue();
+    $stored = json_decode(DB::table('users')->where('id', $user->id)->value('preferences'), true);
+    expect(array_key_exists('falsy', $stored))->toBeTrue();
+    expect($stored['falsy'])->toEqual($default);
+})->with([[false], [0], [0.0], [''], [[]], [null]]);
+
+it('replaces existing preferences with configured defaults', function () {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults', ['theme' => 'light', 'enabled' => false]);
+    UserPreferences::set('theme', 'dark', $user->id);
+    UserPreferences::set('custom', 'value', $user->id);
+
+    UserPreferences::setDefaultPreferences($user->id);
+    resetPreferencesCache();
+
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'light', 'enabled' => false]);
+});
+
+it('preserves fresh database changes when mutating stale preferences', function ($operation) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'light');
+    UserPreferences::set('theme', 'dark', $user->id);
+    UserPreferences::get('theme', $user->id);
+
+    // Another writer has committed a change since this worker loaded preferences.
+    DB::table('users')->where('id', $user->id)->update([
+        'preferences' => '{"theme":"dark","other":"new"}',
+    ]);
+
+    if ($operation === 'set') {
+        UserPreferences::set('theme', 'blue', $user->id);
+    } elseif ($operation === 'reset') {
+        UserPreferences::reset('theme', $user->id);
+    } else {
+        UserPreferences::reset('other_missing', $user->id);
     }
-}
+
+    resetPreferencesCache();
+    expect(UserPreferences::get('other', $user->id))->toBe('new');
+    expect(UserPreferences::get('theme', $user->id))->toBe(match ($operation) {
+        'set' => 'blue',
+        'reset' => 'light',
+        default => 'dark',
+    });
+})->with(['set', 'reset', 'delete']);
+
+it('does not persist or locally expose an unserializable update', function () {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+
+    try {
+        UserPreferences::set('theme', INF, $user->id);
+        test()->fail('Expected JSON encoding to fail');
+    } catch (JsonException) {
+        expect(UserPreferences::get('theme', $user->id))->toBe('before');
+        resetPreferencesCache();
+        expect(UserPreferences::get('theme', $user->id))->toBe('before');
+    }
+});
+
+it('keeps shared cache committed and reloads local state after transaction completion', function ($commit) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    UserPreferences::clearLocalCache();
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    $cached = Cache::get($cacheKey);
+
+    DB::beginTransaction();
+    try {
+        UserPreferences::set('theme', 'during', $user->id);
+        expect(UserPreferences::get('theme', $user->id))->toBe('during');
+        expect(Cache::get($cacheKey))->toBe($cached);
+
+        // Simulate a cache miss during the transaction as well.
+        Cache::forget($cacheKey);
+        UserPreferences::clearLocalCache();
+        expect(UserPreferences::get('theme', $user->id))->toBe('during');
+        expect(Cache::has($cacheKey))->toBeFalse();
+        Cache::forever($cacheKey, $cached);
+
+        if ($commit) {
+            DB::commit();
+        } else {
+            DB::rollBack();
+        }
+    } finally {
+        if (DB::transactionLevel() > 0) {
+            DB::rollBack();
+        }
+    }
+
+    expect(Cache::get($cacheKey))->toBe($commit ? null : $cached);
+    expect(UserPreferences::get('theme', $user->id))->toBe($commit ? 'during' : 'before');
+})->with([true, false]);
+
+it('reads direct database changes in a transaction without publishing them', function () {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    DB::beginTransaction();
+    try {
+        DB::table('users')->where('id', $user->id)->update(['preferences' => '{"theme":"uncommitted"}']);
+        expect(UserPreferences::get('theme', $user->id))->toBe('uncommitted');
+        $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+        expect(Cache::has($cacheKey))->toBeFalse();
+    } finally {
+        DB::rollBack();
+    }
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
+});
+
+it('handles nested transaction commits and rollbacks', function ($commitInner, $commitOuter) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    UserPreferences::clearLocalCache();
+    UserPreferences::get('theme', $user->id);
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    $cached = Cache::get($cacheKey);
+
+    DB::beginTransaction();
+    try {
+        UserPreferences::set('theme', 'outer', $user->id);
+        DB::beginTransaction();
+        UserPreferences::set('theme', 'inner', $user->id);
+        expect(UserPreferences::get('theme', $user->id))->toBe('inner');
+        if ($commitInner) {
+            DB::commit();
+        } else {
+            DB::rollBack();
+        }
+        expect(UserPreferences::get('theme', $user->id))->toBe($commitInner ? 'inner' : 'outer');
+        expect(Cache::get($cacheKey))->toBe($cached);
+        if ($commitOuter) {
+            DB::commit();
+        } else {
+            DB::rollBack();
+        }
+    } finally {
+        if (DB::transactionLevel() > 0) {
+            DB::rollBack(0);
+        }
+    }
+
+    expect(Cache::get($cacheKey))->toBe($commitOuter ? null : $cached);
+    expect(UserPreferences::get('theme', $user->id))->toBe($commitOuter
+        ? ($commitInner ? 'inner' : 'outer')
+        : 'before');
+})->with([[true, true], [false, true], [true, false], [false, false]]);
+
+it('discards cached transactional state when an exception rolls back the transaction', function () {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+
+    try {
+        DB::transaction(function () use ($user) {
+            UserPreferences::set('theme', 'discarded', $user->id);
+            expect(UserPreferences::get('theme', $user->id))->toBe('discarded');
+            throw new RuntimeException('Abort transaction');
+        });
+    } catch (RuntimeException $exception) {
+        expect($exception->getMessage())->toBe('Abort transaction');
+    }
+
+    expect(DB::transactionLevel())->toBe(0);
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
+});
+
+it('falls back to defaults for JSON that is not a preference object', function ($rawPreferences) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults', ['theme' => 'light', 'enabled' => false]);
+    DB::table('users')->where('id', $user->id)->update(['preferences' => $rawPreferences]);
+
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'light', 'enabled' => false]);
+    expect(UserPreferences::get('theme', $user->id))->toBe('light');
+
+    // Exercise the shared cache as well as the initial database read.
+    UserPreferences::clearLocalCache();
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'light', 'enabled' => false]);
+
+    // Writes must also decode the malformed document into a usable object.
+    UserPreferences::set('theme', 'dark', $user->id);
+    resetPreferencesCache();
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'dark', 'enabled' => false]);
+})->with([
+    'empty array' => ['[]'],
+    'populated array' => ['[{"theme":"dark"}]'],
+    'string' => ['"hello"'],
+    'false' => ['false'],
+    'true' => ['true'],
+    'integer' => ['42'],
+    'float' => ['1.5'],
+    'JSON null' => ['null'],
+    'invalid JSON' => ['{broken'],
+    'empty string' => [''],
+    'SQL null' => [null],
+]);
+
+it('preserves valid preference objects and nested arrays and objects', function () {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'light');
+    $preferences = ['nested' => ['options' => [1, false, null], 'object' => ['enabled' => true]]];
+    DB::table('users')->where('id', $user->id)->update(['preferences' => json_encode($preferences)]);
+
+    expect(UserPreferences::all($user->id))->toBe($preferences);
+    UserPreferences::set('theme', 'dark', $user->id);
+    resetPreferencesCache();
+    expect(UserPreferences::all($user->id))->toBe($preferences + ['theme' => 'dark']);
+});
+
+it('keeps a valid empty preference object empty', function () {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'light');
+    DB::table('users')->where('id', $user->id)->update(['preferences' => '{}']);
+
+    expect(UserPreferences::all($user->id))->toBe([]);
+    expect(UserPreferences::get('theme', $user->id))->toBe('light');
+});
+
+it('requires authentication when no user ID is provided', function ($method, $arguments) {
+    expect(Auth::check())->toBeFalse();
+    UserPreferences::{$method}(...$arguments);
+})->with([
+    ['get', ['theme']],
+    ['has', ['theme']],
+    ['all', []],
+    ['set', ['theme', 'dark']],
+    ['reset', ['theme']],
+    ['setDefaultPreferences', []],
+])->throws(AuthenticationException::class);
+
+it('rejects writes to a missing user without caching phantom preferences', function ($method, $arguments) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    $user->delete();
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+
+    try {
+        UserPreferences::{$method}(...[...$arguments, $user->id]);
+        test()->fail('Expected a missing user exception');
+    } catch (RecordNotFoundException $exception) {
+        expect($exception->getMessage())->toBe('Cannot save preferences: user does not exist.');
+    }
+
+    expect(Cache::has($cacheKey))->toBeFalse();
+    expect(UserPreferences::get('theme', $user->id))->toBeNull();
+})->with([
+    ['set', ['theme', 'phantom']],
+    ['reset', ['theme']],
+    ['setDefaultPreferences', []],
+]);
+
+it('allows writes without authentication when an existing user ID is explicit', function () {
+    $user = User::factory()->create();
+    expect(Auth::check())->toBeFalse();
+    UserPreferences::set('theme', 'dark', $user->id);
+    resetPreferencesCache();
+    expect(UserPreferences::get('theme', $user->id))->toBe('dark');
+});
