@@ -24,6 +24,10 @@ function resetPreferencesCache(): void
     Cache::flush();
 }
 
+beforeEach(function () {
+    resetPreferencesCache();
+});
+
 it('can set and get a preference', function () {
     $user = User::factory()->create();
     Auth::login($user);
@@ -114,12 +118,18 @@ it('restores the default value when resetting a preference', function () {
 });
 
 it('returns false when a preference is not set', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
     $value = UserPreferences::has('key_not_set');
 
     expect($value)->toBeBool()->toBeFalse();
 });
 
 it('returns true when a preference is set', function () {
+    $user = User::factory()->create();
+    Auth::login($user);
+
     UserPreferences::set('key_set', 'some_value');
 
     $value = UserPreferences::has('key_set');
