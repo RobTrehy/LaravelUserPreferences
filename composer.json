@@ -64,7 +64,7 @@
                 "RobTrehy\\LaravelUserPreferences\\UserPreferencesServiceProvider"
             ],
             "aliases": {
-                "UserPreferences": "RobTrehy\\LaravelUserPreferences\\Facades\\LaravelUserPreferences"
+                "UserPreferences": "RobTrehy\\LaravelUserPreferences\\Facades\\UserPreferences"
             }
         }
     },
