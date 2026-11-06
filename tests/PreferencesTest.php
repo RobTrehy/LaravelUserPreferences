@@ -525,3 +525,54 @@ it('discards cached transactional state when an exception rolls back the transac
     expect(DB::transactionLevel())->toBe(0);
     expect(UserPreferences::get('theme', $user->id))->toBe('before');
 });
+
+it('falls back to defaults for JSON that is not a preference object', function ($rawPreferences) {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults', ['theme' => 'light', 'enabled' => false]);
+    DB::table('users')->where('id', $user->id)->update(['preferences' => $rawPreferences]);
+
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'light', 'enabled' => false]);
+    expect(UserPreferences::get('theme', $user->id))->toBe('light');
+
+    // Exercise the shared cache as well as the initial database read.
+    UserPreferences::clearLocalCache();
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'light', 'enabled' => false]);
+
+    // Writes must also decode the malformed document into a usable object.
+    UserPreferences::set('theme', 'dark', $user->id);
+    resetPreferencesCache();
+    expect(UserPreferences::all($user->id))->toBe(['theme' => 'dark', 'enabled' => false]);
+})->with([
+    'empty array' => ['[]'],
+    'populated array' => ['[{"theme":"dark"}]'],
+    'string' => ['"hello"'],
+    'false' => ['false'],
+    'true' => ['true'],
+    'integer' => ['42'],
+    'float' => ['1.5'],
+    'JSON null' => ['null'],
+    'invalid JSON' => ['{broken'],
+    'empty string' => [''],
+    'SQL null' => [null],
+]);
+
+it('preserves valid preference objects and nested arrays and objects', function () {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'light');
+    $preferences = ['nested' => ['options' => [1, false, null], 'object' => ['enabled' => true]]];
+    DB::table('users')->where('id', $user->id)->update(['preferences' => json_encode($preferences)]);
+
+    expect(UserPreferences::all($user->id))->toBe($preferences);
+    UserPreferences::set('theme', 'dark', $user->id);
+    resetPreferencesCache();
+    expect(UserPreferences::all($user->id))->toBe($preferences + ['theme' => 'dark']);
+});
+
+it('keeps a valid empty preference object empty', function () {
+    $user = User::factory()->create();
+    config()->set('user-preferences.defaults.theme', 'light');
+    DB::table('users')->where('id', $user->id)->update(['preferences' => '{}']);
+
+    expect(UserPreferences::all($user->id))->toBe([]);
+    expect(UserPreferences::get('theme', $user->id))->toBe('light');
+});

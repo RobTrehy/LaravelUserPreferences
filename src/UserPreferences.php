@@ -86,7 +86,7 @@ class UserPreferences
         self::$preferencesCache[$userId] = self::decodePreferences($rawPreferences);
     }
 
-    protected static function decodePreferences(?string $rawPreferences): mixed
+    protected static function decodePreferences(?string $rawPreferences): object
     {
         if ($rawPreferences === null) {
             return (object) config('user-preferences.defaults');
@@ -94,7 +94,7 @@ class UserPreferences
 
         $preferences = json_decode($rawPreferences);
 
-        return json_last_error() !== JSON_ERROR_NONE || $preferences === null
+        return json_last_error() !== JSON_ERROR_NONE || ! is_object($preferences)
             ? (object) config('user-preferences.defaults')
             : $preferences;
     }
