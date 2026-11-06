@@ -17,9 +17,7 @@ function resetPreferencesCache(bool $flushSharedCache = true): void
 {
     $reflection = new ReflectionClass(UserPreferences::class);
 
-    foreach (['preferencesCache', 'hasLoadedCache'] as $property) {
-        $reflection->getProperty($property)->setValue([]);
-    }
+    $reflection->getProperty('preferencesCache')->setValue([]);
 
     if ($flushSharedCache) {
         Cache::flush();

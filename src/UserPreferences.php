@@ -23,20 +23,6 @@ class UserPreferences
     protected static $preferencesCache = [];
 
     /**
-     * Tracks which user IDs have loaded preferences
-     *
-     * @var array<int, bool>
-     */
-    protected static $hasLoadedCache = [];
-
-    /**
-     * The ID of the user being scoped
-     *
-     * @var int|null
-     */
-    protected $userId;
-
-    /**
      * Check for preferences, load if not already loaded for this user.
      *
      * @param  int|string|null  $userId
@@ -44,7 +30,7 @@ class UserPreferences
     protected static function preferencesLoaded(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
-        if (self::$hasLoadedCache[$userId] ?? false) {
+        if (array_key_exists($userId, self::$preferencesCache)) {
             return;
         }
         self::getPreferences($userId);
@@ -68,7 +54,7 @@ class UserPreferences
         // Use an array to avoid caching objects that require unserialization.
         $column = config('user-preferences.database.column');
         $cachedPreferences = Cache::rememberForever(
-            config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix'),
+            self::cacheKey($userId),
             function () use ($userId, $column) {
                 return ['raw' => DB::table(config('user-preferences.database.table'))
                     ->where(config('user-preferences.database.primary_key'), $userId)
@@ -91,7 +77,6 @@ class UserPreferences
             }
         }
 
-        self::$hasLoadedCache[$userId] = true;
     }
 
     /**
@@ -237,7 +222,17 @@ class UserPreferences
     protected static function resetCache(mixed $userId = null)
     {
         $userId = $userId ?? Auth::id();
-        Cache::forget(config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix'));
+        Cache::forget(self::cacheKey($userId));
+    }
+
+    /**
+     * Build the shared cache key for a resolved user ID.
+     *
+     * @param  int|string|null  $userId
+     */
+    protected static function cacheKey(mixed $userId): string
+    {
+        return config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix');
     }
 
     // ------------------------------------------------------------------
