@@ -23,6 +23,8 @@ return [
      *
      * E.g "notification.email" = {value} would become
      * ["notification" => ["email" => {value}]]
+     *
+     * These options are reserved for future use.
      */
     'explode-key-strings' => false,
     'explode-key-character' => '.',
