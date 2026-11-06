@@ -23,6 +23,14 @@ class UserPreferences
     protected static $preferencesCache = [];
 
     /**
+     * Clear process-local preferences without invalidating the shared cache.
+     */
+    public static function clearLocalCache(): void
+    {
+        self::$preferencesCache = [];
+    }
+
+    /**
      * Check for preferences, load if not already loaded for this user.
      *
      * @param  int|string|null  $userId

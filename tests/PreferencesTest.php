@@ -1,7 +1,14 @@
 
 <?php
 
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -15,9 +22,7 @@ uses(RefreshDatabase::class);
  */
 function resetPreferencesCache(bool $flushSharedCache = true): void
 {
-    $reflection = new ReflectionClass(UserPreferences::class);
-
-    $reflection->getProperty('preferencesCache')->setValue([]);
+    UserPreferences::clearLocalCache();
 
     if ($flushSharedCache) {
         Cache::flush();
@@ -27,6 +32,56 @@ function resetPreferencesCache(bool $flushSharedCache = true): void
 beforeEach(function () {
     resetPreferencesCache();
 });
+
+it('clears local preferences at worker lifecycle boundaries while retaining shared cache', function ($event) {
+    $user = User::factory()->create();
+    UserPreferences::set('theme', 'before', $user->id);
+    UserPreferences::get('theme', $user->id);
+
+    $cacheKey = config('user-preferences.cache.prefix').$user->id.config('user-preferences.cache.suffix');
+    // Simulate another worker updating the shared cache.
+    Cache::forever($cacheKey, ['raw' => '{"theme":"after"}']);
+    expect(UserPreferences::get('theme', $user->id))->toBe('before');
+
+    if ($event === 'terminating') {
+        app()->terminate();
+    } elseif (in_array($event, [JobProcessing::class, JobProcessed::class, JobExceptionOccurred::class], true)) {
+        $job = Mockery::mock(Job::class);
+        $job->shouldReceive('payload')->andReturn([]);
+        app('events')->dispatch($event === JobExceptionOccurred::class
+            ? new $event('testing', $job, new RuntimeException('Failed job'))
+            : new $event('testing', $job));
+    } elseif ($event === RequestHandled::class) {
+        app('events')->dispatch(new RequestHandled(Request::create('/'), new Response));
+    } else {
+        app('events')->dispatch($event);
+    }
+
+    $reflection = new ReflectionClass(UserPreferences::class);
+    expect($reflection->getProperty('preferencesCache')->getValue())->toBeEmpty();
+    expect(Cache::get($cacheKey))->toBe(['raw' => '{"theme":"after"}']);
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    try {
+        expect(UserPreferences::get('theme', $user->id))->toBe('after');
+        expect(DB::getQueryLog())->toBeEmpty();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
+    }
+})->with([
+    RequestHandled::class,
+    JobProcessing::class,
+    JobProcessed::class,
+    JobExceptionOccurred::class,
+    'Laravel\\Octane\\Events\\RequestReceived',
+    'Laravel\\Octane\\Events\\RequestTerminated',
+    'Laravel\\Octane\\Events\\TaskReceived',
+    'Laravel\\Octane\\Events\\TaskTerminated',
+    'terminating',
+]);
 
 it('reuses shared cached preferences after clearing local state', function ($rawPreferences, $deleteUser, $expected) {
     $user = User::factory()->create();
