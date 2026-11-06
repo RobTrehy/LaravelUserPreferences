@@ -104,7 +104,7 @@ class UserPreferences
      */
     public static function setDefaultPreferences(mixed $userId = null)
     {
-        self::save($userId, static fn ($preferences) => (object) config('user-preferences.defaults'));
+        self::save($userId, static fn($preferences) => (object) config('user-preferences.defaults'));
     }
 
     /**
@@ -123,7 +123,7 @@ class UserPreferences
             return self::$preferencesCache[$userId]->{$key};
         }
 
-        return config('user-preferences.defaults.'.$key, null);
+        return config('user-preferences.defaults.' . $key, null);
     }
 
     /**
@@ -138,12 +138,12 @@ class UserPreferences
     public static function set(string $key, $value, mixed $userId = null)
     {
         $missing = new \stdClass;
-        $default = config('user-preferences.defaults.'.$key, $missing);
+        $default = config('user-preferences.defaults.' . $key, $missing);
 
         if ($default !== $missing && gettype($value) !== gettype($default)) {
             throw new InvalidArgumentException(
-                'The expected type is "'.gettype($default).
-                    '"! "'.gettype($value).'" was given.'
+                'The expected type is "' . gettype($default) .
+                    '"! "' . gettype($value) . '" was given.'
             );
         }
 
@@ -165,7 +165,7 @@ class UserPreferences
     public static function reset(string $key, mixed $userId = null)
     {
         $missing = new \stdClass;
-        $default = config('user-preferences.defaults.'.$key, $missing);
+        $default = config('user-preferences.defaults.' . $key, $missing);
         $hasDefault = $default !== $missing;
 
         self::save($userId, static function ($preferences) use ($key, $default, $hasDefault) {
@@ -196,7 +196,7 @@ class UserPreferences
     }
 
     /**
-     * Get all preferences as an object.
+     * Get all preferences as an associative array.
      *
      * @param  int|string|null  $userId
      * @return mixed
@@ -259,7 +259,7 @@ class UserPreferences
      */
     protected static function cacheKey(mixed $userId): string
     {
-        return config('user-preferences.cache.prefix').$userId.config('user-preferences.cache.suffix');
+        return config('user-preferences.cache.prefix') . $userId . config('user-preferences.cache.suffix');
     }
 
     // ------------------------------------------------------------------
