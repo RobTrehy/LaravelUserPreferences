@@ -22,6 +22,8 @@ it('serializes concurrent preference mutations without losing committed keys', f
         'search_path' => 'public',
         'sslmode' => 'prefer',
     ];
+    $originalConnection = DB::getDefaultConnection();
+    $originalTable = config('user-preferences.database.table');
     config()->set('database.connections.concurrency', $connection);
     DB::setDefaultConnection('concurrency');
     $db = DB::connection();
@@ -75,13 +77,22 @@ it('serializes concurrent preference mutations without losing committed keys', f
         });
         expect(array_key_exists('custom', $stored))->toBe($operation !== 'delete');
     } finally {
-        if ($db->transactionLevel() > 0) {
-            $db->rollBack(0);
+        try {
+            if ($db->transactionLevel() > 0) {
+                $db->rollBack(0);
+            }
+        } finally {
+            try {
+                $process?->stop();
+                $db->getSchemaBuilder()->dropIfExists($table);
+            } finally {
+                // Testbench rolls back its SQLite migrations after this test.
+                // Restore both settings even if PostgreSQL cleanup fails.
+                config()->set('user-preferences.database.table', $originalTable);
+                DB::setDefaultConnection($originalConnection);
+                UserPreferences::clearLocalCache();
+                DB::purge('concurrency');
+            }
         }
-        $process?->stop();
-        $db->getSchemaBuilder()->dropIfExists($table);
-        UserPreferences::clearLocalCache();
-        DB::setDefaultConnection('testing');
-        DB::purge('concurrency');
     }
 })->with(['set', 'reset', 'delete'])->group('concurrency');
